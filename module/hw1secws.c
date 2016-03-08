@@ -3,7 +3,8 @@
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h> 
 
-/* index 1 is for the forward hook, index 2-3 is for input/output hooks*/
+/* index 1 is for the forward hook, index 2-3 is for input/output hooks
+more on this at the Doc added */
 static struct nf_hook_ops hooks[3];
 
 unsigned int block_hook_func(unsigned int hooknum, struct sk_buff *skb, const struct net_device *in, const struct net_device *out, int (*okfn)(struct sk_buff *)){
@@ -33,7 +34,7 @@ int start_hooks(void){
 			hooks[i].hook = block_hook_func; 	//function to call
 		else
 			hooks[i].hook = pass_hook_func;
-		ret = nf_register_hook(&(hooks[i]));
+		ret = nf_register_hook(&(hooks[i]));	//the return value. found that at ref (3) at the Doc.
 		if (ret != 0) {
 			return -1;
 		}
