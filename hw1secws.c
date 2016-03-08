@@ -49,9 +49,8 @@ int close_hooks(void){
 	return 0;
 }
 
-int __init my_module_init_function(void) {
+int __init module_init_function(void) {
 
-	printk(KERN_INFO "Hello World!\n");
 	if (start_hooks() == -1 ){
 		printk(KERN_INFO "Register hook failed. existing..");
 		close_hooks();
@@ -60,11 +59,10 @@ int __init my_module_init_function(void) {
 	return 0;
 }
 
-void __exit my_module_exit_function(void) {
-	printk(KERN_INFO "Goodbye World!\n");
+void __exit module_exit_function(void) {
 	close_hooks();
 } 
 
 /* As seen in class */
-module_init(my_module_init_function);
-module_exit(my_module_exit_function);
+module_init(module_init_function);
+module_exit(module_exit_function);
