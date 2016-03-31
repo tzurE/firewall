@@ -1,5 +1,9 @@
 #include "hookfuncs.h"
 
+/* index 1 is for the forward hook, index 2-3 is for input/output hooks
+more on this at the Doc added */
+struct nf_hook_ops hooks[3];
+int cnt_blocked = 0, cnt_accepted = 0;
 
 unsigned int block_hook_func(unsigned int hooknum, struct sk_buff *skb, const struct net_device *in, const struct net_device *out, int (*okfn)(struct sk_buff *)){
   printk(KERN_INFO "*** packet blocked ***\n");
@@ -46,3 +50,7 @@ int close_hooks(void){
 		nf_unregister_hook(&(hooks[i]));
 	return 0;
 }
+
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Tzur Elyiahu");
