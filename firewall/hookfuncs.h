@@ -3,6 +3,9 @@
 #include <linux/kernel.h> /* Needed for KERN_INFO */ 
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h> 
+#include <linux/ip.h>
+#include <linux/tcp.h>
+#include <linux/udp.h>
 
 /* declaring them as extern so everyone knows it's defined at hookfuncs.c */
 extern struct nf_hook_ops hooks[3];

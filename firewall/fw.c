@@ -45,6 +45,7 @@ static DEVICE_ATTR(sysfs_att, S_IRWXO , display, modify);
 
 
 static int __init module_init_function(void) {
+	printk(KERN_INFO "Strating Firewall");
 
 	//create char device - as seen in class
 	major_number = register_chrdev(0, "Sysfs_Device", &fops);\
@@ -91,6 +92,7 @@ static int __init module_init_function(void) {
 }
 
 static void __exit module_exit_function(void) {
+	printk(KERN_INFO "Closing Firewall");
 	/* clean everything up */
 	device_remove_file(sysfs_device, (const struct device_attribute *)&dev_attr_sysfs_att.attr);
 	device_destroy(sysfs_class, MKDEV(major_number, 0));
