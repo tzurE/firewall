@@ -1,6 +1,7 @@
 #include "fw.h"
 #include "hookfuncs.h"
 
+int firewall_activated = 0;
 static int major_fw_rules;
 static int major_fw_log;
 static int minor_rules;
@@ -11,6 +12,10 @@ static struct device* fw_log_device = NULL;
 
 extern int cnt_blocked;
 extern int cnt_accepted;
+
+static int str_len;							// Length of 'test_String'
+char* buffer_index;							// The moving index of the original buffer
+
 
 
 /******* fw_rules functions and atts *******/
@@ -33,16 +38,33 @@ ssize_t set_rules(struct device *dev, struct device_attribute *attr, const char 
 //using sysfs to access it
 static DEVICE_ATTR(rules_table, S_IRWXO , get_rules, set_rules);
 
+//and regular fops
 static struct file_operations fops_rules = {
 	.owner = THIS_MODULE
 };
 
 ssize_t get_fw_status(struct device *dev, struct device_attribute *attr, char *buf)	{
-	char* msg = "This is get_fw_status!\n";
+	char* msg = "";
+	if (firewall_activated == 1)
+		msg = "firewall active!\n";
+	else 
+		msg = "firewall is not active!\n";
 	return scnprintf(buf, PAGE_SIZE, msg);
 }
 
 ssize_t activate_fw(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)	{
+	int temp;
+	if (sscanf(buf, "%u", &temp) == 1){
+		if (temp == 0 && firewall_activated == 1){
+			printk(KERN_INFO "deactivating firewall");
+			firewall_activated = 0;
+		}
+		if (temp == 1 && firewall_activated == 0){
+			printk(KERN_INFO "activating firewall");
+			firewall_activated = 1;
+			
+		}
+	}
 	return count;	
 }
 
@@ -66,25 +88,48 @@ static DEVICE_ATTR(rules_size, S_IRWXO , get_rules_size, demi_write);
 
 
 /******* fw_log functions and atts and size *******/
-ssize_t get_log(struct device *dev, struct device_attribute *attr, char *buf){
+ssize_t get_log(struct file *filp, char *buff, size_t length, loff_t *offp){
+	ssize_t num_of_bytes;
 	char* msg = "This is get_log\n";
-	return scnprintf(buf, PAGE_SIZE, msg);
+	scnprintf(buff, PAGE_SIZE, msg);
+	int retval;
+	num_of_bytes = (str_len < length) ? str_len : length;
+    if (num_of_bytes == 0) { // We check to see if there's anything to write to the user
+    	return 0;
+	}
+    if (copy_to_user(buff, buffer_index, num_of_bytes)) { // Send the data to the user through 'copy_to_user'
+        return -EFAULT;
+    } else { // fuction succeed, we just sent the user 'num_of_bytes' bytes, so we updating the counter and the string pointer index
+        str_len -= num_of_bytes;
+        buffer_index += num_of_bytes;
+        return num_of_bytes;
+    }
+
+	return -EFAULT; // Should never reach here
 }
 
-ssize_t demi_set_log(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)	{
-	return count;	
+ssize_t open_log(struct file *filp, const char *buff, size_t len, loff_t * off)	{
+	str_len = strlen("This is get_log\n");
+	buffer_index = "This is get_log\n";
+	return 0;	
+}
+
+ssize_t demi_set_log(struct file *filp, const char *buff, size_t len, loff_t * off)	{
+	return 1;	
 }
 
 //using regular file ops to access device
 static struct file_operations fops_log = {
 	.write = demi_set_log,
 	.read = get_log,
+	.open = open_log,
 	.owner = THIS_MODULE
 };
 
 ssize_t get_log_size(struct device *dev, struct device_attribute *attr, char *buf){
 	char* msg = "This is get_log_size";
 	return scnprintf(buf, PAGE_SIZE, msg);
+
 }
 
 ssize_t set_log_size(struct device *dev, struct device_attribute *attr, char *buf){
@@ -115,7 +160,7 @@ static DEVICE_ATTR(log_clear, S_IRWXO, demi_clear_log ,clear_log);
 
 
 static int __init module_init_function(void) {
-	printk(KERN_INFO "Strating Firewall\n");
+	printk(KERN_INFO "Strating Firewall module\n");
 
 	//create fw_rules device - as seen in class
 	printk( KERN_INFO "register_chrdev\n" );
@@ -182,7 +227,7 @@ static int __init module_init_function(void) {
 }
 
 static void __exit module_exit_function(void) {
-	printk(KERN_INFO "Closing Firewall");
+	
 	/* clean everything up */
 	device_remove_file(fw_rules_device, (const struct device_attribute *)&dev_attr_active.attr);
 	device_remove_file(fw_rules_device, (const struct device_attribute *)&dev_attr_rules_size.attr);
@@ -196,6 +241,7 @@ static void __exit module_exit_function(void) {
 	unregister_chrdev(major_fw_rules, "fw_rules");
 
 	close_hooks();
+	printk(KERN_INFO "Closing Firewall module");
 } 
 
 /* As seen in class */

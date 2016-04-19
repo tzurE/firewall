@@ -96,4 +96,6 @@ typedef struct {
 	unsigned int   	count;        	// counts this line's hits
 } log_row_t;
 
+
+extern int firewall_activated;
 #endif // _FW_H_

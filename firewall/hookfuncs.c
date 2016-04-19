@@ -1,23 +1,41 @@
 #include "hookfuncs.h"
+#include "fw.h"
+
 
 /* index 1 is for the forward hook, index 2-3 is for input/output hooks
 more on this at the Doc added */
 struct nf_hook_ops hooks[3];
 int cnt_blocked = 0, cnt_accepted = 0;
+extern int firewall_activated;
+
+int packet_get(struct sk_buff *skb, const struct net_device *in, unsigned int hooknum, int dir){
+	rule_t packet;
+	struct iphdr *iphd;
+	struct tcphdr *tcphd;
+	struct udphdr *udphd;
+
+	iphd = ip_hdr(skb)
+	//if dir = 20 then it's input. else it's 0 then it's output
+	tcphd = (struct tcphdr *)(skb_transport_header(skb)+dir)
+	udphd = (struct udphdr *)(skb_transport_header(skb)+dir)
+
+	input.src_ip = iphd->saddr;
+	printk("%d\n", input.src_ip);
+}
 
 unsigned int input_hook_func(unsigned int hooknum, struct sk_buff *skb, const struct net_device *in, const struct net_device *out, int (*okfn)(struct sk_buff *)){
   // struct tcphdr *tcp;
-  char source[16];
-  struct iphdr *ip;
-  ip = ip_hdr(skb);
-  int src_ip = ip->saddr;
-  snprintf(source, 16, "%pI4", &ip->saddr); // Mind the &!
-  printk(KERN_INFO "*** input packet ***\n");
+  // char source[16];
+  // struct iphdr *ip;
+  // ip = ip_hdr(skb);
+  // int src_ip = ip->saddr;
+  // snprintf(source, 16, "%pI4", &ip->saddr); // Mind the &!
+  // printk(KERN_INFO "*** input packet ***\n");
   
-  printk(source);
-  printk(KERN_INFO "\n");
-  cnt_blocked++;
-  return NF_ACCEPT;
+  // printk(source);
+  // printk(KERN_INFO "\n");
+  // cnt_blocked++;
+  return packet_get(skb, in, hooknum, 20);
 }
 
 unsigned int output_hook_func(unsigned int hooknum, struct sk_buff *skb, const struct net_device *in, const struct net_device *out, int (*okfn)(struct sk_buff *)){
@@ -28,9 +46,7 @@ unsigned int output_hook_func(unsigned int hooknum, struct sk_buff *skb, const s
 
 
 int start_hooks(void){
-	/* I have learned how to initialize the hook struct (what each field receives) using an example I found online.
-	   A link to that example is provided at the Doc(1) */
-
+	printk(KERN_INFO "Activating firewall");
 	int i = 0, ret;
 
 	hooks[0].hooknum = NF_INET_PRE_ROUTING;  		//use INET and not IP. IP is for userspace, INET is for kernel
@@ -48,14 +64,17 @@ int start_hooks(void){
 			return -1;
 		}
 	}
+	firewall_activated = 1;
 	return 0;
 }
 
 int close_hooks(void){
+	printk(KERN_INFO "deactivating firewall");
 	int i = 0;
 	/* unregister the functions. found this also at link (1) at the Doc.*/
 	for (i = 0; i < 2; i++)
 		nf_unregister_hook(&(hooks[i]));
+	firewall_activated = 0;
 	return 0;
 }
 
