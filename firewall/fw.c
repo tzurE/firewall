@@ -1,91 +1,181 @@
 #include "fw.h"
 #include "hookfuncs.h"
 
-/*I've chosen to keep generic names, because I'm guessing this is onyl a practice run for the next assigment
-there we would create meaningful devices, so in the meanwhile i've kept the names as general device. */
-static int major_number;
-static struct class* sysfs_class = NULL;
-static struct device* sysfs_device = NULL;
-static unsigned int sysfs_int = 0;
+static int major_fw_rules;
+static int major_fw_log;
+static int minor_rules;
+static int minor_log; 
+static struct class* fw_class = NULL;
+static struct device* fw_rules_device = NULL;
+static struct device* fw_log_device = NULL;
 
 extern int cnt_blocked;
 extern int cnt_accepted;
 
-static struct file_operations fops = {
-	.owner = THIS_MODULE
-};
 
-/* display and modify funcs, as seen in class */
-ssize_t display(struct device *dev, struct device_attribute *attr, char *buf)	//sysfs show as seen in class
-{
-	char* msg = "Firewall Packets Summary:\n"
-				"Number of accepted packets: %d \n"
-				"Number of dropped packets: %d \n"
-				"Total number of packets: %d \n";
-
-	return scnprintf(buf, PAGE_SIZE, msg, cnt_accepted, cnt_blocked, (cnt_blocked+cnt_accepted), sysfs_int);
+/******* fw_rules functions and atts *******/
+ssize_t get_rules(struct device *dev, struct device_attribute *attr, char *buf)	{
+	char* msg = "This is get_rules\n";
+	return scnprintf(buf, PAGE_SIZE, msg);
 }
 
-ssize_t modify(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)	//sysfs store 
-{
+ssize_t set_rules(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)	{
 	int temp;
 	if (sscanf(buf, "%u", &temp) == 1){
 		if (temp == 0){
 			cnt_blocked = 0;
 			cnt_accepted = 0;
 		}
-
 	}
-
 	return count;	
 }
 
+//using sysfs to access it
+static DEVICE_ATTR(rules_table, S_IRWXO , get_rules, set_rules);
 
-static DEVICE_ATTR(sysfs_att, S_IRWXO , display, modify);
+static struct file_operations fops_rules = {
+	.owner = THIS_MODULE
+};
+
+ssize_t get_fw_status(struct device *dev, struct device_attribute *attr, char *buf)	{
+	char* msg = "This is get_fw_status!\n";
+	return scnprintf(buf, PAGE_SIZE, msg);
+}
+
+ssize_t activate_fw(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)	{
+	return count;	
+}
+
+//using sysfs to access it
+static DEVICE_ATTR(active, S_IRWXO , get_fw_status, activate_fw);
+
+ssize_t get_rules_size(struct device *dev, struct device_attribute *attr, char *buf)	{
+	char* msg = "This is get_rules_size!!\n";
+	return scnprintf(buf, PAGE_SIZE, msg);
+}
+
+ssize_t demi_write(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)	{
+	return count;	
+}
+
+//using sysfs to access it
+static DEVICE_ATTR(rules_size, S_IRWXO , get_rules_size, demi_write);
+
+/******* fw_rules functions and atts end*******/
+
+
+
+/******* fw_log functions and atts and size *******/
+ssize_t get_log(struct device *dev, struct device_attribute *attr, char *buf){
+	char* msg = "This is get_log\n";
+	return scnprintf(buf, PAGE_SIZE, msg);
+}
+
+ssize_t demi_set_log(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)	{
+	return count;	
+}
+
+//using regular file ops to access device
+static struct file_operations fops_log = {
+	.write = demi_set_log,
+	.read = get_log,
+	.owner = THIS_MODULE
+};
+
+ssize_t get_log_size(struct device *dev, struct device_attribute *attr, char *buf){
+	char* msg = "This is get_log_size";
+	return scnprintf(buf, PAGE_SIZE, msg);
+}
+
+ssize_t set_log_size(struct device *dev, struct device_attribute *attr, char *buf){
+	return 1;
+}
+
+static DEVICE_ATTR(log_size, S_IRWXO , get_log_size, set_log_size);
+
+ssize_t clear_log(struct device *dev, struct device_attribute *attr, char *buf){
+	int temp;
+	if (sscanf(buf, "%u", &temp) == 1){
+		if (temp == 0){
+			cnt_blocked = 0;
+			cnt_accepted = 0;
+		}
+	}
+	return 1;
+} 
+
+ssize_t demi_clear_log(struct device *dev, struct device_attribute *attr, char *buf){
+	return 1;
+}
+
+static DEVICE_ATTR(log_clear, S_IRWXO, demi_clear_log ,clear_log);
+
+/******* fw_log functions and atts END *******/
+
 
 
 static int __init module_init_function(void) {
-	printk(KERN_INFO "Strating Firewall");
+	printk(KERN_INFO "Strating Firewall\n");
 
-	//create char device - as seen in class
-	major_number = register_chrdev(0, "Sysfs_Device", &fops);\
-	if (major_number < 0)
+	//create fw_rules device - as seen in class
+	printk( KERN_INFO "register_chrdev\n" );
+	major_fw_rules = register_chrdev(0, "fw_rules", &fops_rules);
+	major_fw_log = register_chrdev(0, "fw_log", &fops_log);
+	if ((major_fw_log < 0) || (major_fw_rules < 0))
 		return -1;
 		
-	//create sysfs class - as seen in class
-	sysfs_class = class_create(THIS_MODULE, "Sysfs_class");
-	if (IS_ERR(sysfs_class))
-	{
-		unregister_chrdev(major_number, "Sysfs_Device");
+	//create fw class - as seen in class
+	fw_class = class_create(THIS_MODULE, "fw");
+	if (IS_ERR(fw_class)){
+		unregister_chrdev(major_fw_log, "fw_log");
+		unregister_chrdev(major_fw_rules, "fw_rules");
 		return -1;
 	}
 	
-	//create sysfs device - as seen in class
-	sysfs_device = device_create(sysfs_class, NULL, MKDEV(major_number, 0), NULL, "sysfs_class" "_" "sysfs_Device");	
-	if (IS_ERR(sysfs_device))
+	minor_rules = MKDEV(major_fw_rules, 0);
+	minor_log = MKDEV(major_fw_log, 0);
+
+	//create rules device - as seen in class
+	fw_rules_device = device_create(fw_class, NULL, minor_rules , NULL, "fw_rules");
+	//create log device - as seen in class
+	fw_log_device = device_create(fw_class, NULL, minor_log , NULL, "fw_log");	
+
+	if (IS_ERR(fw_rules_device) || IS_ERR(fw_log_device))
 	{
-		class_destroy(sysfs_class);
-		unregister_chrdev(major_number, "Sysfs_Device");
+		class_destroy(fw_class);
+		unregister_chrdev(major_fw_log, "fw_log");
+		unregister_chrdev(major_fw_rules, "fw_rules");
 		return -1;
 	}
 	
 	//create sysfs file attributes - as seen in class
-	if (device_create_file(sysfs_device, (const struct device_attribute *)&dev_attr_sysfs_att.attr))
-	{
-		device_destroy(sysfs_class, MKDEV(major_number, 0));
-		class_destroy(sysfs_class);
-		unregister_chrdev(major_number, "Sysfs_Device");
+	if (device_create_file(fw_rules_device, (const struct device_attribute *)&dev_attr_rules_table.attr)){
+		device_destroy(fw_class, minor_log);
+		device_destroy(fw_class, minor_rules);
+		class_destroy(fw_class);
+		unregister_chrdev(major_fw_log, "fw_log");
+		unregister_chrdev(major_fw_rules, "fw_rules");
 		return -1;
 	}
+	device_create_file(fw_log_device, (const struct device_attribute *)&dev_attr_log_size.attr);
+	device_create_file(fw_rules_device, (const struct device_attribute *)&dev_attr_active.attr);
+	device_create_file(fw_rules_device, (const struct device_attribute *)&dev_attr_rules_size.attr);
+	device_create_file(fw_log_device, (const struct device_attribute *)&dev_attr_log_clear.attr);
 
 	if (start_hooks() == -1 ){
 		printk(KERN_INFO "Register hook failed. existing..");
 		close_hooks();
 		/* Clean everything up */
-		device_remove_file(sysfs_device, (const struct device_attribute *)&dev_attr_sysfs_att.attr);
-		device_destroy(sysfs_class, MKDEV(major_number, 0));
-		class_destroy(sysfs_class);
-		unregister_chrdev(major_number, "Sysfs_Device");
+		device_remove_file(fw_rules_device, (const struct device_attribute *)&dev_attr_active.attr);
+		device_remove_file(fw_rules_device, (const struct device_attribute *)&dev_attr_rules_size.attr);
+		device_remove_file(fw_rules_device, (const struct device_attribute *)&dev_attr_rules_table.attr);
+		device_remove_file(fw_log_device, (const struct device_attribute *)&dev_attr_log_clear.attr);
+		device_remove_file(fw_log_device, (const struct device_attribute *)&dev_attr_log_size.attr);
+		device_destroy(fw_class, minor_log);
+		device_destroy(fw_class, minor_rules);
+		class_destroy(fw_class);
+		unregister_chrdev(major_fw_log, "fw_log");
+		unregister_chrdev(major_fw_rules, "fw_rules");
 		return -1;
 	}
 	return 0;
@@ -94,10 +184,17 @@ static int __init module_init_function(void) {
 static void __exit module_exit_function(void) {
 	printk(KERN_INFO "Closing Firewall");
 	/* clean everything up */
-	device_remove_file(sysfs_device, (const struct device_attribute *)&dev_attr_sysfs_att.attr);
-	device_destroy(sysfs_class, MKDEV(major_number, 0));
-	class_destroy(sysfs_class);
-	unregister_chrdev(major_number, "Sysfs_Device");
+	device_remove_file(fw_rules_device, (const struct device_attribute *)&dev_attr_active.attr);
+	device_remove_file(fw_rules_device, (const struct device_attribute *)&dev_attr_rules_size.attr);
+	device_remove_file(fw_rules_device, (const struct device_attribute *)&dev_attr_rules_table.attr);
+	device_remove_file(fw_log_device, (const struct device_attribute *)&dev_attr_log_clear.attr);
+	device_remove_file(fw_log_device, (const struct device_attribute *)&dev_attr_log_size.attr);
+	device_destroy(fw_class, minor_log);
+	device_destroy(fw_class, minor_rules);
+	class_destroy(fw_class);
+	unregister_chrdev(major_fw_log, "fw_log");
+	unregister_chrdev(major_fw_rules, "fw_rules");
+
 	close_hooks();
 } 
 

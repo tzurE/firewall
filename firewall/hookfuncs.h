@@ -6,6 +6,7 @@
 #include <linux/ip.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
+#include "fw.h"
 
 /* declaring them as extern so everyone knows it's defined at hookfuncs.c */
 extern struct nf_hook_ops hooks[3];

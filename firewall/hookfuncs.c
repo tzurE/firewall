@@ -6,8 +6,16 @@ struct nf_hook_ops hooks[3];
 int cnt_blocked = 0, cnt_accepted = 0;
 
 unsigned int input_hook_func(unsigned int hooknum, struct sk_buff *skb, const struct net_device *in, const struct net_device *out, int (*okfn)(struct sk_buff *)){
+  // struct tcphdr *tcp;
+  char source[16];
+  struct iphdr *ip;
+  ip = ip_hdr(skb);
+  int src_ip = ip->saddr;
+  snprintf(source, 16, "%pI4", &ip->saddr); // Mind the &!
   printk(KERN_INFO "*** input packet ***\n");
   
+  printk(source);
+  printk(KERN_INFO "\n");
   cnt_blocked++;
   return NF_ACCEPT;
 }
