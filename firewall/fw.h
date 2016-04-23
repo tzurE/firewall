@@ -11,6 +11,8 @@
 #include <linux/tcp.h>
 #include <linux/udp.h>
 
+#include <linux/string.h>
+
 
 // the protocols we will work with
 typedef enum {

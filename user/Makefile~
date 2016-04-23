@@ -4,4 +4,4 @@ clean:
 	-rm a.out
 
 a.out: 
-	gcc main.c -w -o a.out
+	gcc main.c -o a.out

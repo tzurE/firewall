@@ -1,5 +1,6 @@
 #include "fw.h"
 #include "hookfuncs.h"
+#include "stateless_funcs.h"
 
 int firewall_activated = 0;
 static int major_fw_rules;
@@ -12,6 +13,7 @@ static struct device* fw_log_device = NULL;
 
 extern int cnt_blocked;
 extern int cnt_accepted;
+extern rule_t rules[50];
 
 static int str_len;							// Length of 'test_String'
 char* buffer_index;							// The moving index of the original buffer
@@ -24,14 +26,11 @@ ssize_t get_rules(struct device *dev, struct device_attribute *attr, char *buf)	
 	return scnprintf(buf, PAGE_SIZE, msg);
 }
 
+//get the rules from the user, parse it and insert it to the rules table
 ssize_t set_rules(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)	{
-	int temp;
-	if (sscanf(buf, "%u", &temp) == 1){
-		if (temp == 0){
-			cnt_blocked = 0;
-			cnt_accepted = 0;
-		}
-	}
+	char full_rules[4090];
+
+	printk("%s", buf);
 	return count;	
 }
 
@@ -76,12 +75,12 @@ ssize_t get_rules_size(struct device *dev, struct device_attribute *attr, char *
 	return scnprintf(buf, PAGE_SIZE, msg);
 }
 
-ssize_t demi_write(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)	{
+ssize_t clear_rule_list(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)	{
 	return count;	
 }
 
 //using sysfs to access it
-static DEVICE_ATTR(rules_size, S_IRWXO , get_rules_size, demi_write);
+static DEVICE_ATTR(rules_size, S_IRWXO , get_rules_size, clear_rule_list);
 
 /******* fw_rules functions and atts end*******/
 
@@ -92,7 +91,6 @@ ssize_t get_log(struct file *filp, char *buff, size_t length, loff_t *offp){
 	ssize_t num_of_bytes;
 	char* msg = "This is get_log\n";
 	scnprintf(buff, PAGE_SIZE, msg);
-	int retval;
 	num_of_bytes = (str_len < length) ? str_len : length;
     if (num_of_bytes == 0) { // We check to see if there's anything to write to the user
     	return 0;

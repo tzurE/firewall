@@ -1,5 +1,6 @@
 #include "hookfuncs.h"
 #include "fw.h"
+#include "stateless_funcs.h"
 
 
 /* index 1 is for the forward hook, index 2-3 is for input/output hooks
@@ -14,27 +15,66 @@ int packet_get(struct sk_buff *skb, const struct net_device *in, unsigned int ho
 	struct tcphdr *tcphd;
 	struct udphdr *udphd;
 
-	iphd = ip_hdr(skb)
+	iphd = ip_hdr(skb);
 	//if dir = 20 then it's input. else it's 0 then it's output
-	tcphd = (struct tcphdr *)(skb_transport_header(skb)+dir)
-	udphd = (struct udphdr *)(skb_transport_header(skb)+dir)
+	//as shown in class and in stackoverflow (documented)
+	tcphd = (struct tcphdr *)(skb_transport_header(skb)+dir);
+	udphd = (struct udphdr *)(skb_transport_header(skb)+dir);
 
-	input.src_ip = iphd->saddr;
-	printk("%d\n", input.src_ip);
+	//get ips
+	packet.src_ip = iphd->saddr;
+	packet.dst_ip = iphd->daddr;
+	//what direction are you going?
+	if (in->name != NULL){
+		if (strcmp(in->name, IN_NET_DEVICE_NAME) == 0)
+			packet.direction=DIRECTION_IN;
+		else
+			packet.direction=DIRECTION_OUT;
+	}
+	else { //it didn't came from any monitored net device, we'll allow it
+		return NF_ACCEPT;
+	}
+
+	//assign protocol
+	packet.protocol = iphd->protocol;
+
+	//return accept but write in log first!
+	if (firewall_activated == 0){
+		char source[16]="";
+		printk(KERN_INFO "packet passed, firewall is offline. src:");
+		snprintf(source, 16, "%pI4", &packet.src_ip);
+		printk(source);
+		printk(KERN_INFO "\n");
+		return NF_ACCEPT;
+	}
+
+	if (packet.protocol == PROT_UDP){
+		packet.src_port = udphd->source;
+		packet.dst_port = udphd->dest;
+	}
+	else if (packet.protocol == PROT_TCP){
+		packet.src_port = tcphd->source;
+		packet.dst_port = tcphd->dest;
+		if (tcphd->ack)
+			packet.ack = ACK_YES;
+		else 
+			packet.ack = ACK_NO;
+
+		//if it's TCP, we can handel christmas
+		if (tcphd->psh && tcphd->urg && tcphd->fin){
+			printk("XMAS");
+			return NF_DROP;
+		}
+	}
+	else if (packet.protocol == PROT_ANY){
+		packet.src_port = PORT_ANY;
+		packet.dst_port = PORT_ANY;
+	}
+
+	return check_rule_exists(packet, hooknum);
 }
 
 unsigned int input_hook_func(unsigned int hooknum, struct sk_buff *skb, const struct net_device *in, const struct net_device *out, int (*okfn)(struct sk_buff *)){
-  // struct tcphdr *tcp;
-  // char source[16];
-  // struct iphdr *ip;
-  // ip = ip_hdr(skb);
-  // int src_ip = ip->saddr;
-  // snprintf(source, 16, "%pI4", &ip->saddr); // Mind the &!
-  // printk(KERN_INFO "*** input packet ***\n");
-  
-  // printk(source);
-  // printk(KERN_INFO "\n");
-  // cnt_blocked++;
   return packet_get(skb, in, hooknum, 20);
 }
 
@@ -46,8 +86,8 @@ unsigned int output_hook_func(unsigned int hooknum, struct sk_buff *skb, const s
 
 
 int start_hooks(void){
-	printk(KERN_INFO "Activating firewall");
 	int i = 0, ret;
+	printk(KERN_INFO "Activating firewall");
 
 	hooks[0].hooknum = NF_INET_PRE_ROUTING;  		//use INET and not IP. IP is for userspace, INET is for kernel
 	hooks[1].hooknum = NF_INET_POST_ROUTING;		//found this on linuxQuestions, a link is provided at the Doc(2)
@@ -69,8 +109,8 @@ int start_hooks(void){
 }
 
 int close_hooks(void){
-	printk(KERN_INFO "deactivating firewall");
 	int i = 0;
+	printk(KERN_INFO "deactivating firewall");
 	/* unregister the functions. found this also at link (1) at the Doc.*/
 	for (i = 0; i < 2; i++)
 		nf_unregister_hook(&(hooks[i]));
