@@ -29,6 +29,7 @@ char* translate_line(char * line, char* buff){
 		strcat(rule, " 2 ");
 
 	//parse the ip and turn it to string
+	//https://beej.us/guide/bgnet/output/html/multipage/inet_ntoaman.html
 	if (strcmp("any", full_src_ip) == 0){
 		strcpy(full_src_ip, "0.0.0.0/0");
 	}
@@ -143,7 +144,7 @@ int main(int argc, const char *argv[]) {
 		return 0;
 	}
 	if (strcmp (argv[1], "load_rule_table_from_file")==0){
-		fd = open("/sys/class/fw/fw_rules/rules_tables", O_WRONLY);
+		fd = open("/sys/class/fw/fw_rules/rules_table", O_WRONLY);
 		if (fd < 0 ){
 			printf("error opening sysfs dev. check if it exists\n" );
 			return 0;
@@ -163,7 +164,7 @@ int main(int argc, const char *argv[]) {
 			translate_line(line, buff);
 			strcat(full_rules, buff);			
 		}
-		printf("%s, %d", full_rules, strlen(full_rules));
+		printf("%s", full_rules);
 		write(fd, full_rules, strlen(full_rules));
 		fclose(rules);
 		close(fd);

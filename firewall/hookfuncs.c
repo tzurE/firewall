@@ -41,6 +41,7 @@ int packet_get(struct sk_buff *skb, const struct net_device *in, unsigned int ho
 	//return accept but write in log first!
 	if (firewall_activated == 0){
 		char source[16]="";
+		//need to log here
 		printk(KERN_INFO "packet passed, firewall is offline. src:");
 		snprintf(source, 16, "%pI4", &packet.src_ip);
 		printk(source);
@@ -121,3 +122,4 @@ int close_hooks(void){
 /* Every .c file requiers this. */
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Tzur Elyiahu");
+

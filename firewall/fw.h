@@ -100,4 +100,5 @@ typedef struct {
 
 
 extern int firewall_activated;
+extern char rules_raw[4090];
 #endif // _FW_H_

@@ -4,6 +4,5 @@ spoof1 in 10.0.1.1/24 any any any any any drop
 spoof2 out 10.0.2.2/24 any any any any any drop
 telnet1 out 10.0.1.1/24 any TCP >1023 23 any accept
 telnet2 in any 10.0.1.1/24 TCP 23 >1023 yes accept
-tzur1 any 127.0.0.1/8 127.0.0.1/8 tcp any any any accept
-tzur2 any 127.0.0.1/8 127.0.0.1/8 udp any any any accept
+telnet2 in 8.8.8.8 10.0.1.1/24 any 23 >1023 yes accept
 default any any any any any any any drop
