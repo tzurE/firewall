@@ -183,11 +183,28 @@ ssize_t activate_fw(struct device *dev, struct device_attribute *attr, const cha
 static DEVICE_ATTR(active, S_IRWXO , get_fw_status, activate_fw);
 
 ssize_t get_rules_size(struct device *dev, struct device_attribute *attr, char *buf)	{
-	char* msg = "This is get_rules_size!!\n";
+	char msg[6] = "";
+	scnprintf(msg, 5, "%d\n", num_rules);
 	return scnprintf(buf, PAGE_SIZE, msg);
 }
 
 ssize_t clear_rule_list(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)	{
+	rule_t empty;
+	int i;
+	int temp;
+	if (sscanf(buf, "%u", &temp) == 1){
+		if (temp == 0){
+			printk(KERN_INFO "Deleting rule list\n");
+			for (i=0; i < num_rules; i++){
+				//setting num rules is enough. this is just extra.									
+				rules[i]=empty;
+			}
+			memset(rules_raw,0,sizeof(rules_raw));
+			strcpy(rules_raw, "");
+			num_rules = 0;
+		}
+	}
+
 	return count;	
 }
 
