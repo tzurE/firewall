@@ -15,13 +15,14 @@ extern int cnt_blocked;
 extern int cnt_accepted;
 
 //rules array
-extern rule_t rules[50];
+extern rule_t rules[MAX_RULES];
 extern int num_rules;
+// a already coded rules buffer
 char rules_raw[4090]="";
 
 
-static int str_len;							// Length of 'test_String'
-char* buffer_index;							// The moving index of the original buffer
+static int str_len;							
+char* buffer_index;
 
 
 /******* fw_rules functions and atts *******/
@@ -45,7 +46,8 @@ ssize_t set_rules(struct device *dev, struct device_attribute *attr, const char 
 	}
 	//copying rules so we can change it, becase buf is const
 	strcpy(full_rules, buf);
-
+	//array that is used for "Get rules"
+	strcpy(rules_raw, full_rules);
 	//saving rules start pointer, so we can free it at the end of this function
 	full_rules_pointer = full_rules;
 
@@ -60,11 +62,6 @@ ssize_t set_rules(struct device *dev, struct device_attribute *attr, const char 
 		// printk("%u, %d, ", src_ip, src_cidr);
 		// printk("%u, %d, ", dst_ip, dst_cidr);
 		// printk("%d, %d, %d, %d, %d\n", protocol, src_port, dst_port, ack, action);
-
-		//insert to array of "Get rules"
-
-		strcat(rules_raw, rule_line);
-		strcat(rules_raw, "\n");
 
 		//insert everything to rule
 		// direction: any=0, in=1, out=2

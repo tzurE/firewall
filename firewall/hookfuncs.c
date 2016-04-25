@@ -81,7 +81,6 @@ unsigned int input_hook_func(unsigned int hooknum, struct sk_buff *skb, const st
 
 unsigned int output_hook_func(unsigned int hooknum, struct sk_buff *skb, const struct net_device *in, const struct net_device *out, int (*okfn)(struct sk_buff *)){
   printk(KERN_INFO "*** output packet ***\n");
-  cnt_accepted++;
   return NF_ACCEPT;
 }
 
