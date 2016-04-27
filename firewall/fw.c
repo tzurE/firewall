@@ -2,7 +2,10 @@
 #include "hookfuncs.h"
 #include "stateless_funcs.h"
 
+/* Global var */
 int firewall_activated = 0;
+
+/* Device vars */
 static int major_fw_rules;
 static int major_fw_log;
 static int minor_rules;
@@ -14,7 +17,7 @@ static struct device* fw_log_device = NULL;
 extern int cnt_blocked;
 extern int cnt_accepted;
 
-//rules array
+/* rules array table*/
 extern rule_t rules[MAX_RULES];
 extern int num_rules;
 // a already coded rules buffer
@@ -24,6 +27,16 @@ char rules_raw[4090]="";
 static int str_len;							
 char* buffer_index;
 
+
+/* Log Node: displaying the current node to write in */
+log_node* curr_log=NULL;
+
+/* log vars, defined at "log.c"*/
+extern int log_size_var;
+extern log_node *log_list;
+int left_to_read;
+char *read_log_buffer;
+char *pointer_log_buffer;
 
 /******* fw_rules functions and atts *******/
 ssize_t get_rules(struct device *dev, struct device_attribute *attr, char *buf)	{
@@ -41,7 +54,7 @@ ssize_t set_rules(struct device *dev, struct device_attribute *attr, const char 
 	rule_t rule;
 	full_rules = kmalloc(count, GFP_ATOMIC);
 	if(full_rules == NULL){
-		printk(KERN_ERR "failed to allocate rules");
+		printk(KERN_ERR "failed to allocate rules\n");
 		return -1;
 	}
 	//copying rules so we can change it, becase buf is const
@@ -56,13 +69,8 @@ ssize_t set_rules(struct device *dev, struct device_attribute *attr, const char 
 	rule_line = strsep(&full_rules, "\n");
 	while (full_rules != NULL) {
 		// printk("\n%s\n", rule_line);
+		//read line, and assign it to the rule table (no parsing needed!)
 		sscanf(rule_line, "%s %d %u %d %u %d %d %hd %hd %d %d", rule.rule_name, &dir, &src_ip, &src_cidr, &dst_ip, &dst_cidr, &protocol, &src_port, &dst_port, &ack, &action);
-		// printk("%s, ", rule.rule_name);
-		// printk("%d, ", dir);
-		// printk("%u, %d, ", src_ip, src_cidr);
-		// printk("%u, %d, ", dst_ip, dst_cidr);
-		// printk("%d, %d, %d, %d, %d\n", protocol, src_port, dst_port, ack, action);
-
 		//insert everything to rule
 		// direction: any=0, in=1, out=2
 		if (dir == 0)
@@ -184,6 +192,12 @@ ssize_t get_rules_size(struct device *dev, struct device_attribute *attr, char *
 	scnprintf(msg, 5, "%d\n", num_rules);
 	return scnprintf(buf, PAGE_SIZE, msg);
 }
+ssize_t rules_size_demi(struct device *dev, struct device_attribute *attr, const char *buf, size_t count){
+	return 1;
+}
+ssize_t clear_demi(struct device *dev, struct device_attribute *attr, const char *buf, size_t count){
+	return 1;
+}
 
 ssize_t clear_rule_list(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)	{
 	rule_t empty;
@@ -206,26 +220,26 @@ ssize_t clear_rule_list(struct device *dev, struct device_attribute *attr, const
 }
 
 //using sysfs to access it
-static DEVICE_ATTR(rules_size, S_IRWXO , get_rules_size, clear_rule_list);
-
+static DEVICE_ATTR(rules_size, S_IRWXO , get_rules_size, rules_size_demi);
+static DEVICE_ATTR(clear_rules, S_IRWXO , clear_demi, clear_rule_list);
 /******* fw_rules functions and atts end*******/
 
 
 
 /******* fw_log functions and atts and size *******/
-ssize_t get_log(struct file *filp, char *buff, size_t length, loff_t *offp){
+ssize_t get_log(struct file *filp, char *buff, size_t length, loff_t *off){
+	char buf[120]="";
 	ssize_t num_of_bytes;
-	char* msg = "This is get_log\n";
-	scnprintf(buff, PAGE_SIZE, msg);
-	num_of_bytes = (str_len < length) ? str_len : length;
+
+	num_of_bytes = (left_to_read < length) ? left_to_read : length;
     if (num_of_bytes == 0) { // We check to see if there's anything to write to the user
     	return 0;
 	}
-    if (copy_to_user(buff, buffer_index, num_of_bytes)) { // Send the data to the user through 'copy_to_user'
+    if (copy_to_user(buff, pointer_log_buffer, num_of_bytes)) { // Send the data to the user through 'copy_to_user'
         return -EFAULT;
     } else { // fuction succeed, we just sent the user 'num_of_bytes' bytes, so we updating the counter and the string pointer index
-        str_len -= num_of_bytes;
-        buffer_index += num_of_bytes;
+        left_to_read -= num_of_bytes;
+        pointer_log_buffer += num_of_bytes;
         return num_of_bytes;
     }
 
@@ -233,8 +247,52 @@ ssize_t get_log(struct file *filp, char *buff, size_t length, loff_t *offp){
 }
 
 ssize_t open_log(struct file *filp, const char *buff, size_t len, loff_t * off)	{
-	str_len = strlen("This is get_log\n");
-	buffer_index = "This is get_log\n";
+	char buf[120]="";
+	left_to_read = (log_size_var + 1)*52;
+	read_log_buffer = kcalloc(left_to_read,sizeof(char), GFP_KERNEL);
+	
+	pointer_log_buffer = read_log_buffer;
+
+	if (curr_log == NULL)
+		curr_log = log_list;
+	
+	if (curr_log == NULL)
+		return 0;
+
+	while(curr_log != NULL){
+		snprintf(buf,PAGE_SIZE, "%lu ", curr_log->log_entry.timestamp);
+		strcat(read_log_buffer, buf);
+
+		snprintf(buf,PAGE_SIZE, "%d ", curr_log->log_entry.protocol);
+		strcat(read_log_buffer, buf);
+
+		snprintf(buf,PAGE_SIZE, "%d ", curr_log->log_entry.action);
+		strcat(read_log_buffer, buf);
+
+		snprintf(buf,PAGE_SIZE, "%d ", curr_log->log_entry.hooknum);
+		strcat(read_log_buffer, buf);
+
+		snprintf(buf, PAGE_SIZE, "%u ", curr_log->log_entry.src_ip);
+		strcat(read_log_buffer, buf);
+
+		snprintf(buf, PAGE_SIZE, "%u ", curr_log->log_entry.dst_ip);
+		strcat(read_log_buffer, buf);
+
+		snprintf(buf,PAGE_SIZE, "%d ", ntohs(curr_log->log_entry.src_port));
+		strcat(read_log_buffer, buf);
+
+		snprintf(buf,PAGE_SIZE, "%d ", ntohs(curr_log->log_entry.dst_port));
+		strcat(read_log_buffer, buf);
+
+		snprintf(buf,PAGE_SIZE, "%d ", curr_log->log_entry.reason);
+		strcat(read_log_buffer, buf);
+
+		snprintf(buf,PAGE_SIZE, "%d\n", curr_log->log_entry.count);
+		strcat(read_log_buffer, buf);
+
+		curr_log = curr_log->next;
+	}
+	strcat(read_log_buffer, "\0");
 	return 0;	
 }
 
@@ -251,7 +309,8 @@ static struct file_operations fops_log = {
 };
 
 ssize_t get_log_size(struct device *dev, struct device_attribute *attr, char *buf){
-	char* msg = "This is get_log_size";
+	char msg[6] = "";
+	scnprintf(msg, 5, "%d\n", log_size_var);
 	return scnprintf(buf, PAGE_SIZE, msg);
 
 }
@@ -264,11 +323,8 @@ static DEVICE_ATTR(log_size, S_IRWXO , get_log_size, set_log_size);
 
 ssize_t clear_log(struct device *dev, struct device_attribute *attr, char *buf){
 	int temp;
-	if (sscanf(buf, "%u", &temp) == 1){
-		if (temp == 0){
-			cnt_blocked = 0;
-			cnt_accepted = 0;
-		}
+	if (sscanf(buf, "%d", &temp) == 1){
+		clear_main_log();
 	}
 	return 1;
 } 
@@ -280,8 +336,6 @@ ssize_t demi_clear_log(struct device *dev, struct device_attribute *attr, char *
 static DEVICE_ATTR(log_clear, S_IRWXO, demi_clear_log ,clear_log);
 
 /******* fw_log functions and atts END *******/
-
-
 
 static int __init module_init_function(void) {
 	printk(KERN_INFO "Strating Firewall module\n");
@@ -330,6 +384,7 @@ static int __init module_init_function(void) {
 	device_create_file(fw_rules_device, (const struct device_attribute *)&dev_attr_active.attr);
 	device_create_file(fw_rules_device, (const struct device_attribute *)&dev_attr_rules_size.attr);
 	device_create_file(fw_log_device, (const struct device_attribute *)&dev_attr_log_clear.attr);
+	device_create_file(fw_rules_device, (const struct device_attribute *)&dev_attr_clear_rules.attr);
 
 	if (start_hooks() == -1 ){
 		printk(KERN_INFO "Register hook failed. existing..");
@@ -340,6 +395,7 @@ static int __init module_init_function(void) {
 		device_remove_file(fw_rules_device, (const struct device_attribute *)&dev_attr_rules_table.attr);
 		device_remove_file(fw_log_device, (const struct device_attribute *)&dev_attr_log_clear.attr);
 		device_remove_file(fw_log_device, (const struct device_attribute *)&dev_attr_log_size.attr);
+		device_remove_file(fw_rules_device, (const struct device_attribute *)&dev_attr_clear_rules.attr);
 		device_destroy(fw_class, minor_log);
 		device_destroy(fw_class, minor_rules);
 		class_destroy(fw_class);
@@ -358,6 +414,7 @@ static void __exit module_exit_function(void) {
 	device_remove_file(fw_rules_device, (const struct device_attribute *)&dev_attr_rules_table.attr);
 	device_remove_file(fw_log_device, (const struct device_attribute *)&dev_attr_log_clear.attr);
 	device_remove_file(fw_log_device, (const struct device_attribute *)&dev_attr_log_size.attr);
+	device_remove_file(fw_rules_device, (const struct device_attribute *)&dev_attr_clear_rules.attr);
 	device_destroy(fw_class, minor_log);
 	device_destroy(fw_class, minor_rules);
 	class_destroy(fw_class);

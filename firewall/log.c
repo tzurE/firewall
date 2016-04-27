@@ -1,7 +1,25 @@
 #include "log.h"
-
+/*** 
+I didn't use list.h
+only found that out after i've created this log
+***/
 int log_size_var = 0;
 log_node *log_list = NULL;
+
+
+int clear_main_log(void){
+	log_node *curr;
+
+	while (log_list != NULL){
+		curr=log_list->next;
+		kfree(log_list);
+		log_size_var--;
+		log_list=curr;
+	}
+	if (log_size_var == 0)
+		printk("log cleared");
+	return 1;
+}
 
 int insert_log(rule_t *packet, rule_t *rule, reason_t reason, int action, int hooknum){
 
@@ -27,7 +45,8 @@ int insert_log(rule_t *packet, rule_t *rule, reason_t reason, int action, int ho
 	//timestamp with u32 flag
 	new_log_entry->timestamp = (u32)insert_time.tv_sec;
 	new_log_entry->action = action;
-	new_log_entry->reason=reason;
+	if (reason != 0)
+		new_log_entry->reason=reason;
 	new_log_entry->hooknum=hooknum;
 
 	//populate entry using data from packet
@@ -42,6 +61,7 @@ int insert_log(rule_t *packet, rule_t *rule, reason_t reason, int action, int ho
 	curr = log_list;
 	while (curr != NULL){
 
+		//we check for all the conditions. I had no other way to do it, this seemed the only straight way.
 		if(curr->log_entry.reason == reason && curr->log_entry.protocol == packet->protocol &&
 			curr->log_entry.src_ip == packet->src_ip && curr->log_entry.dst_ip == packet->dst_ip &&
 			curr->log_entry.src_port == packet->src_port && curr->log_entry.dst_port == packet->dst_port &&

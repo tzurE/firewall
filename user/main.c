@@ -233,7 +233,7 @@ char* encode_line(char * line, char* buff){
 
 int main(int argc, const char *argv[]) {
 	int fd, fd2, count;
-	char buff[200];
+	char buff[200]="";
 	char full_rules[4090]="";
 	char *rule_line=NULL;
 
@@ -298,9 +298,9 @@ int main(int argc, const char *argv[]) {
 
 
 	if (strcmp(argv[1], "clear_rules")==0){
-		fd = open("/sys/class/fw/fw_rules/rules_size", O_WRONLY);
+		fd = open("/sys/class/fw/fw_rules/clear_rules", O_WRONLY);
 		if (fd < 0){
-			printf("Error opening sysfs device rules_table, please make sure it exists\n");
+			printf("Error opening sysfs device clear_rules, please make sure it exists\n");
 			return -1;
 		}
 		write(fd, "0", 2);
@@ -313,7 +313,7 @@ int main(int argc, const char *argv[]) {
 		char buff[40]="", buff2[40];
 		fd = open("/sys/class/fw/fw_rules/active", O_RDWR);
 		if (fd < 0){
-			printf("Error opening sysfs device rules_table, please make sure it exists\n");
+			printf("Error opening sysfs device active, please make sure it exists\n");
 			return -1;
 		}
 
@@ -335,7 +335,7 @@ int main(int argc, const char *argv[]) {
 		char buff[40]="";
 		fd = open("/sys/class/fw/fw_rules/active", O_RDWR);
 		if (fd < 0){
-			printf("Error opening sysfs device rules_table, please make sure it exists\n");
+			printf("Error opening sysfs device active please make sure it exists\n");
 			return -1;
 		}
 
@@ -354,6 +354,13 @@ int main(int argc, const char *argv[]) {
 	}
 
 	if (strcmp(argv[1], "show_log") == 0){
+		fd = open("/dev/fw_log", O_RDONLY);
+		if (fd < 0){
+			printf("Error opening fw_log device, please make sure it exists\n");
+			return -1;
+		}
+		read(fd, buff, 190);
+		printf(buff);
 
 	}
 

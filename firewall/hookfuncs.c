@@ -1,6 +1,7 @@
 #include "hookfuncs.h"
 #include "fw.h"
 #include "stateless_funcs.h"
+#include "log.h"
 
 
 /* index 1 is for the forward hook, index 2-3 is for input/output hooks
@@ -49,11 +50,12 @@ int packet_get(struct sk_buff *skb, const struct net_device *net_d, unsigned int
 
 	//assign protocol
 	packet.protocol = iphd->protocol;
-	//return accept but write in log first!
+	// in case firewall is off - no need to check rules. so accept all!
 	if (firewall_activated == 0){
 		char source[16]="";
 		//need to log here
 		printk(KERN_INFO "packet passed, firewall is offline. src:");
+		insert_log(&packet, 0, REASON_FW_INACTIVE, 1, hooknum);
 		snprintf(source, 16, "%pI4", &packet.src_ip);
 		printk(source);
 		printk(KERN_INFO "\n");
