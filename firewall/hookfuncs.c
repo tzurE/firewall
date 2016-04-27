@@ -9,7 +9,7 @@ struct nf_hook_ops hooks[3];
 int cnt_blocked = 0, cnt_accepted = 0;
 extern int firewall_activated;
 
-int packet_get(struct sk_buff *skb, const struct net_device *in, unsigned int hooknum, int dir){
+int packet_get(struct sk_buff *skb, const struct net_device *net_d, unsigned int hooknum, int dir){
 	rule_t packet;
 	struct iphdr *iphd;
 	struct tcphdr *tcphd;
@@ -19,25 +19,36 @@ int packet_get(struct sk_buff *skb, const struct net_device *in, unsigned int ho
 	//if dir = 20 then it's input. else it's 0 then it's output
 	//as shown in class and in stackoverflow (documented)
 	tcphd = (struct tcphdr *)(skb_transport_header(skb)+dir);
-	udphd = (struct udphdr *)(skb_transport_header(skb)+dir);
+	udphd = (struct udphdr *)(skb_transport_header(skb));
 
 	//get ips
 	packet.src_ip = iphd->saddr;
 	packet.dst_ip = iphd->daddr;
 	//what direction are you going?
-	if (in->name != NULL){
-		if (strcmp(in->name, IN_NET_DEVICE_NAME) == 0)
-			packet.direction=DIRECTION_IN;
-		else
-			packet.direction=DIRECTION_OUT;
+	if (net_d->name != NULL && ((strcmp(net_d->name, IN_NET_DEVICE_NAME)==0) || (strcmp(net_d->name, OUT_NET_DEVICE_NAME)==0))){
+		if (dir == 20){ //in pre hook
+			printk("hook in\n");
+			if (strcmp(net_d->name, IN_NET_DEVICE_NAME) == 0)
+				packet.direction=DIRECTION_OUT;
+			else
+				packet.direction=DIRECTION_IN;
+		}
+		else { //in post hook
+			printk("hook out\n");
+			if (strcmp(net_d->name, IN_NET_DEVICE_NAME) == 0)
+				packet.direction=DIRECTION_IN;
+			else
+				packet.direction=DIRECTION_OUT;
+
+		}
 	}
 	else { //it didn't came from any monitored net device, we'll allow it
+		
 		return NF_ACCEPT;
 	}
 
 	//assign protocol
 	packet.protocol = iphd->protocol;
-
 	//return accept but write in log first!
 	if (firewall_activated == 0){
 		char source[16]="";
@@ -80,14 +91,13 @@ unsigned int input_hook_func(unsigned int hooknum, struct sk_buff *skb, const st
 }
 
 unsigned int output_hook_func(unsigned int hooknum, struct sk_buff *skb, const struct net_device *in, const struct net_device *out, int (*okfn)(struct sk_buff *)){
-  printk(KERN_INFO "*** output packet ***\n");
-  return NF_ACCEPT;
+  return packet_get(skb, out, hooknum, 0);
 }
 
 
 int start_hooks(void){
 	int i = 0, ret;
-	printk(KERN_INFO "Activating firewall");
+	printk(KERN_INFO "Activating firewall\n");
 
 	hooks[0].hooknum = NF_INET_PRE_ROUTING;  		//use INET and not IP. IP is for userspace, INET is for kernel
 	hooks[1].hooknum = NF_INET_POST_ROUTING;		//found this on linuxQuestions, a link is provided at the Doc(2)

@@ -8,7 +8,103 @@
 #include <arpa/inet.h>
 
 /* Basic program for reading and writing from a chardev */
-char* translate_line(char * line, char* buff){
+
+int decode_line(char* rule_line, char* rule){
+	char rule_name[20], src_buff[50]="", dst_buff[50]="";
+	int dir, src_ip, src_cidr, dst_ip, dst_cidr, protocol, src_port, dst_port, ack, action;
+	int src_any=0, dst_any=0;
+	char *src_ip_str=NULL, *dst_ip_str=NULL;
+	char src_str[90]="", dst_str[90]=""; 
+	struct sockaddr_in src_ip_struct, dst_ip_struct;
+
+	sscanf(rule_line, "%s %d %u %d %u %d %d %hd %hd %d %d", rule_name, &dir, &src_ip_struct.sin_addr, &src_cidr, &dst_ip_struct.sin_addr, &dst_cidr, &protocol, &src_port, &dst_port, &ack, &action);
+		strcat(rule, rule_name);
+		//insert everything to rule
+		// direction: any=0, in=1, out=2
+		if (dir == 0)
+			strcat(rule, " any ");
+		else if (dir == 1)
+			strcat(rule, " in ");
+		else
+			strcat(rule, " out ");
+
+		//insert the ip 
+		src_ip_str = inet_ntoa(src_ip_struct.sin_addr);
+		//must copy to use strcmp
+		strcpy(src_buff, src_ip_str);
+		if(strcmp("0.0.0.0", src_buff) != 0)
+			strcat(rule, src_ip_str);
+		else{
+			strcat(rule, "any");
+			src_any=1;
+		}
+		if (src_cidr != 32 && !src_any){
+			strcat(rule, "/");
+			sprintf(src_str, "%d", src_cidr);
+			strcat(rule, src_str);
+		}
+		strcat(rule, " ");
+		dst_ip_str = inet_ntoa(dst_ip_struct.sin_addr);
+		strcpy(dst_buff, dst_ip_str);
+		if (strcmp("0.0.0.0", dst_buff) != 0)
+			strcat(rule, dst_ip_str);
+		else{
+			strcat(rule, "any");
+			dst_any=1;
+		}
+		if (dst_cidr != 32 && !dst_any) {
+			strcat(rule, "/");
+			sprintf(dst_str, "%d", dst_cidr);
+			strcat(rule, dst_str);
+		}
+		//protocol: 0=ICMP, 1=TCP, 2=UDP, 3=any, 4=OTHER
+		if(protocol == 0)
+			strcat(rule, " ICMP");
+		else if (protocol == 1)
+			strcat(rule, " TCP");
+		else if (protocol == 2)
+			strcat(rule, " UDP");
+		else if (protocol == 3)
+			strcat(rule, " any");
+		else 
+			strcat(rule, " other");
+
+		//ports using 0 and 1023 as a convention.
+		if (src_port == 0)
+			strcat(rule, " any");
+		else if (src_port == 1023 || src_port > 1023)
+			strcat(rule, " >1023");
+		else{
+			sprintf(src_str, " %d", src_port);
+			strcat(rule, src_str);
+		}
+		if (dst_port == 0)
+			strcat(rule, " any");
+		else if (dst_port == 1023 || dst_port > 1023)
+			strcat(rule, " >1023");
+		else{
+			sprintf(dst_str, " %d", dst_port);
+			strcat(rule, dst_str);
+		}
+
+		// ack! 0=any, 1=yes, 2=no
+		if (ack == 0)
+			strcat(rule, " any");
+		else if (ack==1)
+			strcat(rule, " yes");
+		else if (ack == 2)
+			strcat(rule, " no");
+
+		//action 1=accept, 0=drop
+		if (action == 1)
+			strcat(rule, " accept\n");
+		else
+			strcat(rule, " drop\n");
+
+}
+
+
+char* encode_line(char * line, char* buff){
 	char buffer[120];
 	struct sockaddr_in src;
 	struct sockaddr_in dst;
@@ -136,18 +232,22 @@ char* translate_line(char * line, char* buff){
 }
 
 int main(int argc, const char *argv[]) {
-	int fd;
+	int fd, fd2, count;
 	char buff[200];
+	char full_rules[4090]="";
+	char *rule_line=NULL;
 
 	if (argc < 2 ){
-		printf ("error! wrong number of args! \n");
+		printf ("error! wrong number of args! must use a command \n");
 		return 0;
 	}
-	if (strcmp (argv[1], "load_rule_table_from_file")==0){
+
+	/* Load Rules */
+	if (strcmp (argv[1], "load_rules")==0){
 		fd = open("/sys/class/fw/fw_rules/rules_table", O_WRONLY);
 		if (fd < 0 ){
 			printf("error opening sysfs dev. check if it exists\n" );
-			return 0;
+			return -1;
 		}
 		FILE *rules = fopen(argv[2], "r");
 
@@ -158,16 +258,107 @@ int main(int argc, const char *argv[]) {
 		}
 
 		char line[100]={0,};
-		char full_rules[4090]="";
 		while(fgets(line, 100, rules) != NULL){
 			char buff[90]="";
-			translate_line(line, buff);
+			encode_line(line, buff);
 			strcat(full_rules, buff);			
 		}
-		printf("%s", full_rules);
 		write(fd, full_rules, strlen(full_rules));
 		fclose(rules);
 		close(fd);
+		return;
+	}
+
+	/* Show Rules*/
+	else if (strcmp(argv[1], "show_rules")==0){
+		char *total_rules=NULL;
+		char *total_rules_pointer=NULL;
+		fd = open("/sys/class/fw/fw_rules/rules_table", O_RDONLY);
+		if (fd < 0){
+			printf("Error opening sysfs device rules_table, please make sure it exists\n");
+			return -1;
+		}
+		
+		total_rules = malloc(sizeof(char)*4090);
+		total_rules_pointer = total_rules;
+		count = read(fd, total_rules, 4090);
+		close(fd);
+		rule_line = strsep(&total_rules, "\n");
+		while (total_rules != NULL){
+			decode_line(rule_line, buff);
+			strcat(full_rules, buff);
+			rule_line = strsep(&total_rules, "\n");
+			strcpy(buff, "");
+		}
+		free(total_rules_pointer);
+		printf("%s", full_rules);
+		return 1;
+
+	}
+
+
+	if (strcmp(argv[1], "clear_rules")==0){
+		fd = open("/sys/class/fw/fw_rules/rules_size", O_WRONLY);
+		if (fd < 0){
+			printf("Error opening sysfs device rules_table, please make sure it exists\n");
+			return -1;
+		}
+		write(fd, "0", 2);
+		close(fd);
+		return 1;
+
+	}
+
+	else if (strcmp(argv[1], "activate") == 0){
+		char buff[40]="", buff2[40];
+		fd = open("/sys/class/fw/fw_rules/active", O_RDWR);
+		if (fd < 0){
+			printf("Error opening sysfs device rules_table, please make sure it exists\n");
+			return -1;
+		}
+
+		read(fd, buff,30);
+		if (strcmp(buff, "firewall active!\n") == 0){
+			printf("firewall already activated!\n");
+		}
+		else {
+			count = write(fd, "1", 2);
+			//check
+			if(count != 0){
+				printf("Firewall successfully activated\n");
+				return 1;
+			}
+		}
+	}
+
+	if (strcmp(argv[1], "deactivate") == 0){
+		char buff[40]="";
+		fd = open("/sys/class/fw/fw_rules/active", O_RDWR);
+		if (fd < 0){
+			printf("Error opening sysfs device rules_table, please make sure it exists\n");
+			return -1;
+		}
+
+		read(fd, buff,30);
+		if (strcmp(buff, "firewall is not active!\n") == 0){
+			printf("firewall already not active!\n");
+		}
+		else {
+			count = write(fd, "0", 2);
+			//check
+			if(count != 0){
+				printf("Firewall successfully deactivated\n");
+				return 1;
+			}
+		}
+	}
+
+	if (strcmp(argv[1], "show_log") == 0){
+
+	}
+
+	if(strcmp(argv[1], "clear_log") == 0){
+
 	}
 	return 1;
 }

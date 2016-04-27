@@ -7,8 +7,8 @@ rule_t rules[50];
 int check_rule_exists(rule_t packet, int hooknum){
 	int i = 0;
 	// char source[16]="";
-	// printk(KERN_INFO "src:");
-	// snprintf(source, 16, "%pI4", &packet.src_ip);
+	// printk(KERN_INFO "src ip:");
+	// snprintf(source, 16, "%pI4 , ", &packet.src_ip);
 	// printk(source);
 	// char source2[16] = "";
 	// snprintf(source2, 16, "%lu", &packet.src_ip);
@@ -29,6 +29,7 @@ int check_rule_exists(rule_t packet, int hooknum){
 		}
 		//had a match in direction. check ip's.
 		if(rules[i].src_ip != 0){ //if ip==0, it means any address, and we passed.
+			// printk(KERN_INFO "src:%u, rule:%u\n", packet.src_ip, rules[i].src_ip);
 			if ((rules[i].src_ip & rules[i].src_prefix_mask) != (packet.src_ip & rules[i].src_prefix_mask)){
 				//no match. next rule.
 				continue;
@@ -36,6 +37,7 @@ int check_rule_exists(rule_t packet, int hooknum){
 		}
 		//src ip match. check dst.
 		if(rules[i].dst_ip != 0){ //if ip==0, it means any address, and we passed.
+			// printk(KERN_INFO "src:%u, rule:%u\n", packet.dst_ip, rules[i].dst_ip);
 			if ((rules[i].dst_ip & rules[i].dst_prefix_mask) != (packet.dst_ip & rules[i].dst_prefix_mask)){
 				//no match. next rule.
 				continue;
@@ -54,12 +56,16 @@ int check_rule_exists(rule_t packet, int hooknum){
 				printk(KERN_INFO "rule:%s, action: %d\n", rules[i].rule_name, rules[i].action);
 				return rules[i].action;
 			}
+			printk(KERN_INFO "b4 ports\n");
 			//if port=0 - ok. if ports are equal - ok. if port is above 1023 and rule port is 1023 - ok.
-			if ((packet.src_port == rules[i].src_port) || ((rules[i].src_port = 1023) && (packet.src_port > 1023)) || (rules[i].src_port == 0)) {
-				if ((packet.dst_port == rules[i].dst_port) || ((rules[i].dst_port = 1023) && (packet.dst_port > 1023)) || (rules[i].dst_port == 0)) {
+			printk("src: %d , rule: %d \n" ,packet.src_port, rules[i].src_port);
+			if ((packet.src_port == rules[i].src_port) || ((rules[i].src_port == 1024) && (packet.src_port > 1023)) || (rules[i].src_port == PORT_ANY)) {
+				if ((packet.dst_port == rules[i].dst_port) || ((rules[i].dst_port == 1024) && (packet.dst_port > 1023)) || (rules[i].dst_port == PORT_ANY)) {
 					//we got a match!
+					printk(KERN_INFO "after4 ports\n");
 					//now check for UDP or TCP
 					if(packet.protocol == PROT_TCP){
+
 						//if ACK is ANY or ACK aquals packet ack - found a rule!
 						if(rules[i].ack == ACK_ANY || rules[i].ack == packet.ack){
 							printk(KERN_INFO "TCP rule %s, %d\n", rules[i].rule_name, rules[i].action);
@@ -70,7 +76,6 @@ int check_rule_exists(rule_t packet, int hooknum){
 						printk(KERN_INFO "UDP rule %s, %d\n", rules[i].rule_name, rules[i].action);
 						return rules[i].action;
 					}
-
 				}
 				//the dst ports didn't match - next rule
 				continue;
@@ -78,18 +83,14 @@ int check_rule_exists(rule_t packet, int hooknum){
 			//the src ports didnt match - next rule.
 			continue;
 		}
-		//protocol is ANY. check ports
-		if ((packet.src_port == rules[i].src_port) || ((rules[i].src_port = 1023) && (packet.src_port > 1023)) || (rules[i].src_port == 0)) {
-			if ((packet.dst_port == rules[i].dst_port) || ((rules[i].dst_port = 1023) && (packet.dst_port > 1023)) || (rules[i].dst_port == 0)) {
-				//match
-				printk(KERN_INFO "rule: %s, %d\n", rules[i].rule_name, rules[i].action);
-				return rules[i].action;
-			}
-		}
+		//protocol is ANY. no need to check ports.
+		//so we passed everything, and found a rule!
+		printk(KERN_INFO "rule: %s, %d\n", rules[i].rule_name, rules[i].action);
+		return rules[i].action;
 	}
 	//we did not find any rule.
 	//block it
 	//TODO - add log!
-	printk("No rule was found. blocked.");
+	printk("No rule was found. blocked.\n");
 	return NF_DROP;
 }

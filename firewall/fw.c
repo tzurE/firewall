@@ -46,7 +46,7 @@ ssize_t set_rules(struct device *dev, struct device_attribute *attr, const char 
 	}
 	//copying rules so we can change it, becase buf is const
 	strcpy(full_rules, buf);
-	//array that is used for "Get rules"
+	//array that is used for "Get rules" - so we won't need to parse it
 	strcpy(rules_raw, full_rules);
 	//saving rules start pointer, so we can free it at the end of this function
 	full_rules_pointer = full_rules;
@@ -104,17 +104,17 @@ ssize_t set_rules(struct device *dev, struct device_attribute *attr, const char 
 
 		//ports using 0 and 1023 as a convention.
 		if (src_port == 0)
-			rule.src_port = 0;
-		else if (src_port == 1023)
-			rule.src_port=1023;
+			rule.src_port = PORT_ANY;
+		else if (src_port == 1023 || src_port > 1023)
+			rule.src_port=1024;
 		else
-			rule.src_port = htons(src_port);
+			rule.src_port = (src_port);
 		if (dst_port == 0)
-			rule.dst_port = 0;
-		else if (dst_port == 1023)
-			rule.dst_port=1023;
+			rule.dst_port = PORT_ANY;
+		else if (dst_port == 1023 || dst_port > 1023)
+			rule.dst_port=1024;
 		else
-			rule.dst_port = htons(dst_port);
+			rule.dst_port = (dst_port);
 
 		// ack! 0=any, 1=yes, 2=no
 		if (ack == 0)
@@ -164,11 +164,11 @@ ssize_t activate_fw(struct device *dev, struct device_attribute *attr, const cha
 	int temp;
 	if (sscanf(buf, "%u", &temp) == 1){
 		if (temp == 0 && firewall_activated == 1){
-			printk(KERN_INFO "deactivating firewall");
+			printk(KERN_INFO "deactivating firewall\n");
 			firewall_activated = 0;
 		}
 		if (temp == 1 && firewall_activated == 0){
-			printk(KERN_INFO "activating firewall");
+			printk(KERN_INFO "activating firewall\n");
 			firewall_activated = 1;
 			
 		}
