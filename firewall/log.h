@@ -13,7 +13,7 @@ typedef struct {
 extern int log_size_var;
 extern log_node *log_list;
 
+int insert_log(rule_t *packet, reason_t reason, int action, int hooknum);
 int clear_main_log(void);
-int insert_log(rule_t *packet, rule_t *rule, reason_t reason, int action, int hooknum);
 
 #endif

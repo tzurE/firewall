@@ -6,19 +6,6 @@ rule_t rules[50];
 
 int check_rule_exists(rule_t packet, int hooknum){
 	int i = 0;
-	// char source[16]="";
-	// printk(KERN_INFO "src ip:");
-	// snprintf(source, 16, "%pI4 , ", &packet.src_ip);
-	// printk(source);
-	// char source2[16] = "";
-	// snprintf(source2, 16, "%lu", &packet.src_ip);
-	// printk(source2);
-
-	// printk(KERN_INFO "direction: ");
-	// printk("%d",packet.direction);
-	// printk("prot: %d\n", packet.protocol);
-	// printk("ports: %d, %d \n", packet.src_port, packet.dst_port);
-	// printk(KERN_INFO "\n");
 
 	for(i=0; i < num_rules; i++){
 
@@ -27,6 +14,7 @@ int check_rule_exists(rule_t packet, int hooknum){
 			//not a match. next rule.
 			continue;
 		}
+
 		//had a match in direction. check ip's.
 		if(rules[i].src_ip != 0){ //if ip==0, it means any address, and we passed.
 			// printk(KERN_INFO "src:%u, rule:%u\n", packet.src_ip, rules[i].src_ip);
@@ -46,51 +34,57 @@ int check_rule_exists(rule_t packet, int hooknum){
 		//dst ip match. check protocol:
 		//if the rule is "ANY" or OTHER, we're ok and should move on.
 		if (rules[i].protocol != PROT_ANY && rules[i].protocol != PROT_OTHER){
-			if(rules[i].protocol != packet.protocol){
-				//not a match.
-				continue;
-			}
-			//protocol equal. check all of the cases:
-			if(packet.protocol == PROT_ICMP){
-				//TODO - Add log!
-				printk(KERN_INFO "rule:%s, action: %d\n", rules[i].rule_name, rules[i].action);
-				return rules[i].action;
-			}
-			printk(KERN_INFO "b4 ports\n");
-			//if port=0 - ok. if ports are equal - ok. if port is above 1023 and rule port is 1023 - ok.
-			printk("src: %d , rule: %d \n" ,packet.src_port, rules[i].src_port);
-			if ((packet.src_port == rules[i].src_port) || ((rules[i].src_port == 1024) && (packet.src_port > 1023)) || (rules[i].src_port == PORT_ANY)) {
-				if ((packet.dst_port == rules[i].dst_port) || ((rules[i].dst_port == 1024) && (packet.dst_port > 1023)) || (rules[i].dst_port == PORT_ANY)) {
-					//we got a match!
-					printk(KERN_INFO "after4 ports\n");
-					//now check for UDP or TCP
-					if(packet.protocol == PROT_TCP){
 
-						//if ACK is ANY or ACK aquals packet ack - found a rule!
-						if(rules[i].ack == ACK_ANY || rules[i].ack == packet.ack){
-							printk(KERN_INFO "TCP rule %s, %d\n", rules[i].rule_name, rules[i].action);
-							return rules[i].action;
+			if(rules[i].protocol == packet.protocol){
+				//protocol equal. check all of the cases:
+				if(packet.protocol == PROT_ICMP){
+					//TODO - Add log!
+					printk(KERN_INFO "rule:%s, action: %d\n", rules[i].rule_name, rules[i].action);
+					insert_log(&packet, i, rules[i].action, hooknum);
+					return rules[i].action;
+				}
+				if(packet.protocol == PROT_TCP){
+					//if ACK is ANY or ACK aquals packet ack - move on!
+					//if port=0 - ok. if ports are equal - ok. if port is above 1023 and rule port is 1023 - ok.
+					if ((packet.src_port == rules[i].src_port) || ((rules[i].src_port == PORT_ABOVE_1023) && (ntohs(packet.src_port) > 1023)) || (rules[i].src_port == PORT_ANY)) {
+						if ((packet.dst_port == rules[i].dst_port) || ((rules[i].dst_port == PORT_ABOVE_1023) && (ntohs(packet.dst_port) > 1023)) || (rules[i].dst_port == PORT_ANY)) {
+							//we got a match!
+							if(rules[i].ack == ACK_ANY || rules[i].ack == packet.ack){
+								printk(KERN_INFO "TCP rule %s, %d\n", rules[i].rule_name, rules[i].action);
+								insert_log(&packet, i, rules[i].action, hooknum);
+								return rules[i].action;
+							}
 						}
 					}
-					else if (packet.protocol == PROT_UDP){
-						printk(KERN_INFO "UDP rule %s, %d\n", rules[i].rule_name, rules[i].action);
-						return rules[i].action;
+					
+				}
+				if (packet.protocol == PROT_UDP){
+					if ((packet.src_port == rules[i].src_port) || ((rules[i].src_port == PORT_ABOVE_1023) && (ntohs(packet.src_port) > 1023)) || (rules[i].src_port == PORT_ANY)) {
+						if ((packet.dst_port == rules[i].dst_port) || ((rules[i].dst_port == PORT_ABOVE_1023) && (ntohs(packet.dst_port) > 1023)) || (rules[i].dst_port == PORT_ANY)) {
+							//we got a match!
+							printk(KERN_INFO "UDP rule %s, %d\n", rules[i].rule_name, rules[i].action);
+							insert_log(&packet, i, rules[i].action, hooknum);
+							return rules[i].action;
+
+						}
 					}
 				}
-				//the dst ports didn't match - next rule
-				continue;
+				
 			}
-			//the src ports didnt match - next rule.
 			continue;
+
 		}
+		
 		//protocol is ANY. no need to check ports.
 		//so we passed everything, and found a rule!
 		printk(KERN_INFO "rule: %s, %d\n", rules[i].rule_name, rules[i].action);
+		insert_log(&packet, i, rules[i].action, hooknum);
 		return rules[i].action;
 	}
 	//we did not find any rule.
 	//block it
 	//TODO - add log!
 	printk("No rule was found. blocked.\n");
+	insert_log(&packet, REASON_NO_MATCHING_RULE, 0, hooknum);
 	return NF_DROP;
 }

@@ -12,8 +12,6 @@
 
 /* declaring them as extern so everyone knows it's defined at hookfuncs.c */
 extern struct nf_hook_ops hooks[3];
-extern int cnt_blocked;
-extern int cnt_accepted;
 
 /* Functions */
 int start_hooks(void);

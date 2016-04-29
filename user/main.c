@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <string.h>
@@ -9,6 +10,72 @@
 
 /* Basic program for reading and writing from a chardev */
 
+int decode_log_line(char* log_line, char* buff){
+	char temp[30];
+	struct sockaddr_in src_ip_struct, dst_ip_struct;
+	unsigned long timestamp;
+	int protocol, action, hooknum;
+	int src_port, dst_port;
+	int reason, count;
+	char *timestamp_string, *src_ip_str, *dst_ip_str, src_ip_str_dem[30];
+	// printf("%s\n", log_line);
+	sscanf(log_line, "%lu %d %d %d %u %u %d %d %d %u", &timestamp, &protocol, &action, &hooknum, &src_ip_struct.sin_addr, &dst_ip_struct.sin_addr, &src_port, &dst_port, &reason, &count);
+	// printf("%lu, %d, %d, %d\n", timestamp, protocol, action, hooknum);
+
+	//parse time http://www.tutorialspoint.com/c_standard_library/c_function_ctime.htm
+	timestamp_string = ctime((const time_t *) &timestamp);
+	//ctime puts \n at the end of the string.
+	timestamp_string[strlen(timestamp_string) - 1] = ' ';
+	strcat(buff, timestamp_string);
+	strcat(buff, " ");
+
+	//parse ips
+	src_ip_str = inet_ntoa(src_ip_struct.sin_addr);
+	strcpy(src_ip_str_dem, src_ip_str);
+	dst_ip_str = inet_ntoa(dst_ip_struct.sin_addr);
+	strcat(buff, src_ip_str_dem);
+	strcat(buff, " ");
+	strcat(buff, dst_ip_str);
+	sprintf(temp, " %d %d", src_port, dst_port);
+	strcat(buff, temp);
+
+	// printf("%s, %s, %u, %u\n", timestamp_string, src_ip_str, src_port, dst_port);
+	//protocol
+	if (protocol == 1)
+		strcat(buff, " icmp ");
+	else if (protocol == 6)
+		strcat(buff, " tcp ");
+	else if (protocol == 17)
+		strcat(buff, " udp ");
+	else
+		strcat(buff, " other ");
+
+	sprintf(temp, "%d ", hooknum);
+	strcat(buff, temp);
+
+	if (action == 1)
+		strcat(buff, "accept ");
+	else 
+		strcat(buff, "drop ");
+
+	if (reason == -1)
+		strcat(buff, "REASON_FW_INACTIVE");
+	else if (reason == -2)
+		strcat(buff, "REASON_NO_MATCHING_RULE");
+	else if (reason == -4)
+		strcat(buff, "REASON_XMAS_PACKET");
+	else if (reason == -6)
+		strcat(buff, "REASON_ILLEGAL_VALUE");
+	else {
+		sprintf(temp, " %d ", reason);
+		strcat(buff, temp);
+	}
+
+	sprintf(temp, " %u\n", count);
+	strcat(buff, temp);
+	return 1;
+}
+
 int decode_line(char* rule_line, char* rule){
 	char rule_name[20], src_buff[50]="", dst_buff[50]="";
 	int dir, src_ip, src_cidr, dst_ip, dst_cidr, protocol, src_port, dst_port, ack, action;
@@ -17,10 +84,11 @@ int decode_line(char* rule_line, char* rule){
 	char src_str[90]="", dst_str[90]=""; 
 	struct sockaddr_in src_ip_struct, dst_ip_struct;
 
-	sscanf(rule_line, "%s %d %u %d %u %d %d %hd %hd %d %d", rule_name, &dir, &src_ip_struct.sin_addr, &src_cidr, &dst_ip_struct.sin_addr, &dst_cidr, &protocol, &src_port, &dst_port, &ack, &action);
-		strcat(rule, rule_name);
+	sscanf(rule_line, "%s %d %u %d %u %d %d %d %d %d %d", rule_name, &dir, &src_ip_struct.sin_addr, &src_cidr, &dst_ip_struct.sin_addr, &dst_cidr, &protocol, &src_port, &dst_port, &ack, &action);
 		//insert everything to rule
 		// direction: any=0, in=1, out=2
+		strcat(rule, rule_name);
+
 		if (dir == 0)
 			strcat(rule, " any ");
 		else if (dir == 1)
@@ -104,17 +172,24 @@ int decode_line(char* rule_line, char* rule){
 }
 
 
-char* encode_line(char * line, char* buff){
+int encode_line(char * line, char* buff){
 	char buffer[120];
 	struct sockaddr_in src;
 	struct sockaddr_in dst;
 	char rule[100]="", full_src_ip[18]="", full_dst_ip[18]="", src_ip[14]="", dst_ip[14]="";
 	char name[20]="";
 	char dir[5]="", protocol[10]="", ack[7]="", action[30]="", src_port[8]="", dst_port[8]="";
-	int src_ip_mask, dst_ip_mask;
+	int src_ip_mask, dst_ip_mask, counts;
 	char *point, *some1, *some;
-	sscanf(line, "%s %s %s %s %s %s %s %s %s", name, dir, full_src_ip, full_dst_ip, protocol, src_port, dst_port, ack, action);
+	counts = sscanf(line, "%s %s %s %s %s %s %s %s %s", name, dir, full_src_ip, full_dst_ip, protocol, src_port, dst_port, ack, action);
 	
+	if(counts == EOF){
+		return -1;
+	}
+	if (counts != 9 && counts != EOF){
+		return -2;
+	}
+
 	strcat(rule, name);
 	//parse direction: any=0, in=1, out=2
 	if(strcmp("any", dir) == 0)
@@ -152,8 +227,15 @@ char* encode_line(char * line, char* buff){
 		sscanf(full_dst_ip, "%s %d", dst_ip, &dst_ip_mask);
 	}
 	//convert to unsigned int
-	inet_aton(src_ip, &src.sin_addr);
-	inet_aton(dst_ip, &dst.sin_addr);
+	//if it's a bad address
+	if(inet_aton(src_ip, &src.sin_addr) == 0){
+		printf("Error parsing ip: %s\n", src_ip);
+		return -2;
+	}
+	if (inet_aton(dst_ip, &dst.sin_addr) == 0){
+		printf("Error parsing ip: %s\n", dst_ip);
+		return -2;
+	}
 	//insert to buffer and then concat to translated rule
 	sprintf(buffer, "%u %d %u %d", src.sin_addr, src_ip_mask , dst.sin_addr, dst_ip_mask);
 	strcat(rule,buffer);
@@ -194,41 +276,26 @@ char* encode_line(char * line, char* buff){
 		strcat(rule, " 0");
 	else if (strcmp("yes", ack) == 0)
 		strcat(rule, " 1");
-	else 
+	else if(strcmp("no", ack) == 0)
 		strcat(rule, " 2");
+	else{
+		printf("Error parsing ack: %s\n", ack);
+		return -2;
+	}
 
 	//parse action: 1=accept, 0=drop
 	if(strcmp("accept", action)==0)
 		strcat(rule, " 1");
-	else 
+	else if (strcmp("drop", action) == 0)
 		strcat(rule, " 0");
+	else{
+		printf("Error parsing action: %s\n", action);
+		return -2;
+	}
 
 	strcat(rule, "\n");
 	sprintf(buff, "%s", rule);
-	// printf("%s", rule);
-	// strcat(rule, " ");
-	// strcat(rule, src_ip_mask);
-	// strcat(rule, " ");
-	// printf("%s, %d\n", src_ip, src_ip_mask);
-	// printf("%s, %d\n", dst_ip, dst_ip_mask);
-	// printf("%u\n", src.sin_addr);
-	// printf("%u\n", dst.sin_addr);
-	// some = inet_ntoa(src.sin_addr); // return the IP
-	// some1 = inet_ntoa(dst.sin_addr);
-	// printf("%s\n", some);
-	// printf("%s\n", some1);
-	//http://stackoverflow.com/questions/1680622/ip-address-to-integer-c
-	// unsigned int c1,c2,c3,c4;
-	// sscanf(src_ip_str, "%d.%d.%d.%d",&c1,&c2,&c3,&c4);
-	// unsigned long ip = (unsigned long)c4+c3*256+c2*256*256+c1*256*256*256;
-	// printf("The unsigned long integer is %lu\n",ip);
-	// printf("%s\n", name);
-	// printf("%s, %s\n" ,full_src_ip, full_dst_ip);
-	// printf("%s\n", dir);
-	// printf("%s, %s, %s, akc: %s, action: %s\n", protocol, src_port, dst_port, ack, action);
-	// printf("%d, %d, %d, %d \n", src_ip, src_ip_mask, dst_ip, dst_ip_mask);
-	// printf("%d %d %d %d %d\n",protocol, src_port, dst_port, ack, action );
-	return "";
+	return 1;
 }
 
 int main(int argc, const char *argv[]) {
@@ -258,11 +325,20 @@ int main(int argc, const char *argv[]) {
 		}
 
 		char line[100]={0,};
+		int retval;
 		while(fgets(line, 100, rules) != NULL){
 			char buff[90]="";
-			encode_line(line, buff);
+			retval =  encode_line(line, buff);
+			if(retval == -1) //EOF, finish this
+				break;
+			if(retval == -2){
+				printf("Error! line parsing failed. make sure that the file is well formatted and each line is built as follows:\n");
+				printf("<rule_name> <direction> <Source_IP>/<nps> <Dest_IP>/<nps> <protocol><Source_port> <Dest_port> <ack> <action>\n");
+				return;
+			}
 			strcat(full_rules, buff);			
 		}
+		// printf("%s", full_rules);
 		write(fd, full_rules, strlen(full_rules));
 		fclose(rules);
 		close(fd);
@@ -283,6 +359,7 @@ int main(int argc, const char *argv[]) {
 		total_rules_pointer = total_rules;
 		count = read(fd, total_rules, 4090);
 		close(fd);
+		strcmp(buff, "");
 		rule_line = strsep(&total_rules, "\n");
 		while (total_rules != NULL){
 			decode_line(rule_line, buff);
@@ -354,17 +431,54 @@ int main(int argc, const char *argv[]) {
 	}
 
 	if (strcmp(argv[1], "show_log") == 0){
+		int sizefd, log_size;
+		char log_size_str[4];
+		char *log_to_user=NULL, *full_log;
+		char* log_line=NULL;
+		char *log_to_user_pointer;
 		fd = open("/dev/fw_log", O_RDONLY);
 		if (fd < 0){
 			printf("Error opening fw_log device, please make sure it exists\n");
 			return -1;
 		}
-		read(fd, buff, 190);
-		printf(buff);
+		sizefd = open("/sys/class/fw/fw_log/log_size", O_RDONLY);
+		if (sizefd < 0){
+			printf("Error getting size of log.\n");
+			return -1;
+		}
+		read(sizefd, log_size_str, 2);
+		sscanf(log_size_str, "%d", &log_size);
+		log_to_user = calloc(log_size*100, sizeof(char));
+		log_to_user_pointer=log_to_user;
+		// printf("log size: %d\n", log_size);
+		while (read(fd, buff, 190) != 0){
+			strcat(log_to_user, buff);
+			strcpy(buff, "");
+		}
+		printf("timestamp  src_ip  dst_ip  src_port  dst_port  protocol  hooknum  action  reason  count\n");
+		//now to parse it!
+		log_line = strsep(&log_to_user, "\n");
+		strcpy(buff, "");
+		while (log_to_user != NULL){
+			decode_log_line(log_line, buff);
+			printf("%s", buff);
+			log_line = strsep(&log_to_user, "\n");
+			strcpy(buff, "");
+
+		}
+		free(log_to_user_pointer);
 
 	}
 
 	if(strcmp(argv[1], "clear_log") == 0){
+		fd = open("/sys/class/fw/fw_log/log_clear", O_WRONLY);
+		if (fd < 0){
+			printf("Error opening fw_log device, please make sure it exists\n");
+			return -1;
+		}
+		write(fd, "c", 2);
+		close(fd);
+		return 1;
 
 	}
 	return 1;

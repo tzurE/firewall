@@ -6,22 +6,7 @@ only found that out after i've created this log
 int log_size_var = 0;
 log_node *log_list = NULL;
 
-
-int clear_main_log(void){
-	log_node *curr;
-
-	while (log_list != NULL){
-		curr=log_list->next;
-		kfree(log_list);
-		log_size_var--;
-		log_list=curr;
-	}
-	if (log_size_var == 0)
-		printk("log cleared");
-	return 1;
-}
-
-int insert_log(rule_t *packet, rule_t *rule, reason_t reason, int action, int hooknum){
+int insert_log(rule_t *packet, reason_t reason, int action, int hooknum){
 
 	log_row_t *new_log_entry;
 	log_node *curr;
@@ -62,6 +47,7 @@ int insert_log(rule_t *packet, rule_t *rule, reason_t reason, int action, int ho
 	while (curr != NULL){
 
 		//we check for all the conditions. I had no other way to do it, this seemed the only straight way.
+		//sorry for the mess....
 		if(curr->log_entry.reason == reason && curr->log_entry.protocol == packet->protocol &&
 			curr->log_entry.src_ip == packet->src_ip && curr->log_entry.dst_ip == packet->dst_ip &&
 			curr->log_entry.src_port == packet->src_port && curr->log_entry.dst_port == packet->dst_port &&
@@ -76,13 +62,27 @@ int insert_log(rule_t *packet, rule_t *rule, reason_t reason, int action, int ho
 			return 1;
 		}
 		//go forward on list
-		curr=(curr->next);
+		curr=(log_node *)(curr->next);
 		continue;
 	}
 	//didn't find a log entry. insert it
-	new_node->next=log_list;
+	new_node->next=(log_list);
 	log_list = new_node;
 	log_size_var++;
 
+	return 1;
+}
 
+int clear_main_log(void){
+	log_node *curr;
+	printk("starting to clear\n");
+	while (log_list != NULL){
+		curr=(log_node *)log_list->next;
+		kfree(log_list);
+		log_size_var--;
+		log_list=curr;
+	}
+	if (log_size_var == 0)
+		printk("log cleared");
+	return 1;
 }

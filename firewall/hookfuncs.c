@@ -7,7 +7,6 @@
 /* index 1 is for the forward hook, index 2-3 is for input/output hooks
 more on this at the Doc added */
 struct nf_hook_ops hooks[3];
-int cnt_blocked = 0, cnt_accepted = 0;
 extern int firewall_activated;
 
 int packet_get(struct sk_buff *skb, const struct net_device *net_d, unsigned int hooknum, int dir){
@@ -26,16 +25,17 @@ int packet_get(struct sk_buff *skb, const struct net_device *net_d, unsigned int
 	packet.src_ip = iphd->saddr;
 	packet.dst_ip = iphd->daddr;
 	//what direction are you going?
+	//first we check if it goes into eth1 or eth2, if so we give direction accordingly
 	if (net_d->name != NULL && ((strcmp(net_d->name, IN_NET_DEVICE_NAME)==0) || (strcmp(net_d->name, OUT_NET_DEVICE_NAME)==0))){
 		if (dir == 20){ //in pre hook
-			printk("hook in\n");
+			//if you're from eth1 - direction is OUT. if you're from eth2 direction is - IN
 			if (strcmp(net_d->name, IN_NET_DEVICE_NAME) == 0)
 				packet.direction=DIRECTION_OUT;
 			else
 				packet.direction=DIRECTION_IN;
 		}
 		else { //in post hook
-			printk("hook out\n");
+			//if you're going to eth1 - IN. if youre going to eth2 - OUT.
 			if (strcmp(net_d->name, IN_NET_DEVICE_NAME) == 0)
 				packet.direction=DIRECTION_IN;
 			else
@@ -43,22 +43,17 @@ int packet_get(struct sk_buff *skb, const struct net_device *net_d, unsigned int
 
 		}
 	}
-	else { //it didn't came from any monitored net device, we'll allow it
-		
-		return NF_ACCEPT;
+	else { //it's not from eth1 or eth2. we still monitor it
+		//I chose to give it the direction - 'any', becuase it is not going to eth1 or eth2
+		packet.direction=DIRECTION_ANY;
 	}
 
 	//assign protocol
 	packet.protocol = iphd->protocol;
 	// in case firewall is off - no need to check rules. so accept all!
 	if (firewall_activated == 0){
-		char source[16]="";
 		//need to log here
-		printk(KERN_INFO "packet passed, firewall is offline. src:");
-		insert_log(&packet, 0, REASON_FW_INACTIVE, 1, hooknum);
-		snprintf(source, 16, "%pI4", &packet.src_ip);
-		printk(source);
-		printk(KERN_INFO "\n");
+		insert_log(&packet, REASON_FW_INACTIVE, 1, hooknum);
 		return NF_ACCEPT;
 	}
 
@@ -76,7 +71,8 @@ int packet_get(struct sk_buff *skb, const struct net_device *net_d, unsigned int
 
 		//if it's TCP, we can handel christmas
 		if (tcphd->psh && tcphd->urg && tcphd->fin){
-			printk("XMAS");
+			printk("XMAS packet\n");
+			insert_log(&packet, REASON_XMAS_PACKET, 0, hooknum);
 			return NF_DROP;
 		}
 	}
