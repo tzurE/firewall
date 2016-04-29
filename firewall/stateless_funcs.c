@@ -17,7 +17,6 @@ int check_rule_exists(rule_t packet, int hooknum){
 
 		//had a match in direction. check ip's.
 		if(rules[i].src_ip != 0){ //if ip==0, it means any address, and we passed.
-			// printk(KERN_INFO "src:%u, rule:%u\n", packet.src_ip, rules[i].src_ip);
 			if ((rules[i].src_ip & rules[i].src_prefix_mask) != (packet.src_ip & rules[i].src_prefix_mask)){
 				//no match. next rule.
 				continue;
@@ -25,7 +24,6 @@ int check_rule_exists(rule_t packet, int hooknum){
 		}
 		//src ip match. check dst.
 		if(rules[i].dst_ip != 0){ //if ip==0, it means any address, and we passed.
-			// printk(KERN_INFO "src:%u, rule:%u\n", packet.dst_ip, rules[i].dst_ip);
 			if ((rules[i].dst_ip & rules[i].dst_prefix_mask) != (packet.dst_ip & rules[i].dst_prefix_mask)){
 				//no match. next rule.
 				continue;
@@ -38,8 +36,6 @@ int check_rule_exists(rule_t packet, int hooknum){
 			if(rules[i].protocol == packet.protocol){
 				//protocol equal. check all of the cases:
 				if(packet.protocol == PROT_ICMP){
-					//TODO - Add log!
-					printk(KERN_INFO "rule:%s, action: %d\n", rules[i].rule_name, rules[i].action);
 					insert_log(&packet, i, rules[i].action, hooknum);
 					return rules[i].action;
 				}
@@ -50,7 +46,6 @@ int check_rule_exists(rule_t packet, int hooknum){
 						if ((packet.dst_port == rules[i].dst_port) || ((rules[i].dst_port == PORT_ABOVE_1023) && (ntohs(packet.dst_port) > 1023)) || (rules[i].dst_port == PORT_ANY)) {
 							//we got a match!
 							if(rules[i].ack == ACK_ANY || rules[i].ack == packet.ack){
-								printk(KERN_INFO "TCP rule %s, %d\n", rules[i].rule_name, rules[i].action);
 								insert_log(&packet, i, rules[i].action, hooknum);
 								return rules[i].action;
 							}
@@ -62,7 +57,6 @@ int check_rule_exists(rule_t packet, int hooknum){
 					if ((packet.src_port == rules[i].src_port) || ((rules[i].src_port == PORT_ABOVE_1023) && (ntohs(packet.src_port) > 1023)) || (rules[i].src_port == PORT_ANY)) {
 						if ((packet.dst_port == rules[i].dst_port) || ((rules[i].dst_port == PORT_ABOVE_1023) && (ntohs(packet.dst_port) > 1023)) || (rules[i].dst_port == PORT_ANY)) {
 							//we got a match!
-							printk(KERN_INFO "UDP rule %s, %d\n", rules[i].rule_name, rules[i].action);
 							insert_log(&packet, i, rules[i].action, hooknum);
 							return rules[i].action;
 
@@ -77,7 +71,6 @@ int check_rule_exists(rule_t packet, int hooknum){
 		
 		//protocol is ANY. no need to check ports.
 		//so we passed everything, and found a rule!
-		printk(KERN_INFO "rule: %s, %d\n", rules[i].rule_name, rules[i].action);
 		insert_log(&packet, i, rules[i].action, hooknum);
 		return rules[i].action;
 	}

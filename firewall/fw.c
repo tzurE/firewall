@@ -2,9 +2,6 @@
 #include "hookfuncs.h"
 #include "stateless_funcs.h"
 
-/* Global var */
-int firewall_activated = 0;
-
 /* Device vars */
 static int major_fw_rules;
 static int major_fw_log;
@@ -29,6 +26,8 @@ extern log_node *log_list;
 int left_to_read;
 char *read_log_buffer;
 char *pointer_log_buffer;
+
+int firewall_activated = 0;
 
 /******* fw_rules functions and atts *******/
 ssize_t get_rules(struct device *dev, struct device_attribute *attr, char *buf)	{

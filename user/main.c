@@ -31,6 +31,7 @@ int decode_log_line(char* log_line, char* buff){
 
 	//parse ips
 	src_ip_str = inet_ntoa(src_ip_struct.sin_addr);
+	//need to copy because inet_ntoa return actually a cons char *
 	strcpy(src_ip_str_dem, src_ip_str);
 	dst_ip_str = inet_ntoa(dst_ip_struct.sin_addr);
 	strcat(buff, src_ip_str_dem);
@@ -334,6 +335,8 @@ int main(int argc, const char *argv[]) {
 			if(retval == -2){
 				printf("Error! line parsing failed. make sure that the file is well formatted and each line is built as follows:\n");
 				printf("<rule_name> <direction> <Source_IP>/<nps> <Dest_IP>/<nps> <protocol><Source_port> <Dest_port> <ack> <action>\n");
+				fclose(rules);
+				close(fd);
 				return;
 			}
 			strcat(full_rules, buff);			
@@ -432,7 +435,7 @@ int main(int argc, const char *argv[]) {
 
 	if (strcmp(argv[1], "show_log") == 0){
 		int sizefd, log_size;
-		char log_size_str[4];
+		char log_size_str[16];
 		char *log_to_user=NULL, *full_log;
 		char* log_line=NULL;
 		char *log_to_user_pointer;
@@ -446,7 +449,7 @@ int main(int argc, const char *argv[]) {
 			printf("Error getting size of log.\n");
 			return -1;
 		}
-		read(sizefd, log_size_str, 2);
+		read(sizefd, log_size_str, 16);
 		sscanf(log_size_str, "%d", &log_size);
 		log_to_user = calloc(log_size*100, sizeof(char));
 		log_to_user_pointer=log_to_user;

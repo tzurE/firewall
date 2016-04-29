@@ -1,7 +1,7 @@
-all: a.out
+all: main.out
 
 clean:
-	-rm a.out
+	-rm main.out
 
-a.out: 
-	gcc main.c -w -o a.out
+main.out: 
+	gcc main.c -w -o main.out

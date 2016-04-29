@@ -101,4 +101,23 @@ typedef struct {
 
 extern int firewall_activated;
 extern char rules_raw[4090];
+
+ssize_t get_rules(struct device *dev, struct device_attribute *attr, char *buf);
+ssize_t clear_rule_list_func(const char *buf, size_t count);
+ssize_t set_rules(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
+ssize_t get_fw_status(struct device *dev, struct device_attribute *attr, char *buf);
+ssize_t activate_fw(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
+ssize_t get_rules_size(struct device *dev, struct device_attribute *attr, char *buf);
+ssize_t rules_size_demi(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
+ssize_t clear_demi(struct device *dev, struct device_attribute *attr, char *buf);
+ssize_t clear_rule_list(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
+ssize_t get_log(struct file *filp, char *buff, size_t length, loff_t *off);
+ssize_t open_log(struct inode *inode, struct file *file);
+ssize_t demi_set_log(struct file *filp, const char *buff, size_t len, loff_t * off);
+ssize_t get_log_size(struct device *dev, struct device_attribute *attr, char *buf);
+ssize_t set_log_size(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
+ssize_t clear_log(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
+ssize_t demi_clear_log(struct device *dev, struct device_attribute *attr, char *buf);
+
+
 #endif // _FW_H_

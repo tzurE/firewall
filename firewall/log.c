@@ -41,7 +41,7 @@ int insert_log(rule_t *packet, reason_t reason, int action, int hooknum){
 	new_log_entry->src_port=packet->src_port;
 	new_log_entry->dst_port=packet->dst_port;
 	new_log_entry->count=1;
-
+	printk("got to here\n");
 	//treverse the log
 	curr = log_list;
 	while (curr != NULL){
@@ -62,11 +62,18 @@ int insert_log(rule_t *packet, reason_t reason, int action, int hooknum){
 			return 1;
 		}
 		//go forward on list
+		if (curr->next == NULL){
+			//end of the list.
+			curr->next=(log_node*)new_node;
+			log_size_var++;
+			return 1;
+
+		}
+
 		curr=(log_node *)(curr->next);
 		continue;
 	}
-	//didn't find a log entry. insert it
-	new_node->next=(log_list);
+	//this will happen once, on the first time.
 	log_list = new_node;
 	log_size_var++;
 

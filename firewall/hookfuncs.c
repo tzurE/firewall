@@ -9,7 +9,7 @@ more on this at the Doc added */
 struct nf_hook_ops hooks[3];
 extern int firewall_activated;
 
-int packet_get(struct sk_buff *skb, const struct net_device *net_d, unsigned int hooknum, int dir){
+int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned int hooknum, int dir){
 	rule_t packet;
 	struct iphdr *iphd;
 	struct tcphdr *tcphd;
@@ -85,11 +85,11 @@ int packet_get(struct sk_buff *skb, const struct net_device *net_d, unsigned int
 }
 
 unsigned int input_hook_func(unsigned int hooknum, struct sk_buff *skb, const struct net_device *in, const struct net_device *out, int (*okfn)(struct sk_buff *)){
-  return packet_get(skb, in, hooknum, 20);
+  return parse_packet(skb, in, hooknum, 20);
 }
 
 unsigned int output_hook_func(unsigned int hooknum, struct sk_buff *skb, const struct net_device *in, const struct net_device *out, int (*okfn)(struct sk_buff *)){
-  return packet_get(skb, out, hooknum, 0);
+  return parse_packet(skb, out, hooknum, 0);
 }
 
 
