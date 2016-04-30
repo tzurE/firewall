@@ -81,7 +81,6 @@ int insert_log(rule_t *packet, reason_t reason, int action, int hooknum){
 
 int clear_main_log(void){
 	log_node *curr;
-	printk("starting to clear\n");
 	while (log_list != NULL){
 		curr=(log_node *)log_list->next;
 		kfree(log_list);

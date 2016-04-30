@@ -322,7 +322,6 @@ static DEVICE_ATTR(log_size, S_IRWXO , get_log_size, set_log_size);
 
 ssize_t clear_log(struct device *dev, struct device_attribute *attr, const char *buf, size_t count){
 	char temp;
-	printk("here at clear\n");
 	if(sscanf(buf, "%c", &temp)== 1)
 		clear_main_log();
 	
@@ -341,7 +340,6 @@ static int __init module_init_function(void) {
 	printk(KERN_INFO "Strating Firewall module\n");
 
 	//create fw_rules device - as seen in class
-	printk( KERN_INFO "register_chrdev\n" );
 	major_fw_rules = register_chrdev(0, "fw_rules", &fops_rules);
 	major_fw_log = register_chrdev(0, "fw_log", &fops_log);
 	if ((major_fw_log < 0) || (major_fw_rules < 0))
