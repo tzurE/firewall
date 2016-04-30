@@ -247,7 +247,7 @@ ssize_t open_log(struct inode *inode, struct file *file)	{
 	char buf[120]="";
 	left_to_read = (log_size_var + 1)*52;
 	//using kcalloc resets all of the array to 0, so we won't print out grbage.
-	read_log_buffer = kcalloc(left_to_read,sizeof(char), GFP_KERNEL);
+	read_log_buffer = kcalloc(left_to_read,sizeof(char), GFP_ATOMIC);
 	
 	pointer_log_buffer = read_log_buffer;
 

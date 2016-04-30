@@ -15,7 +15,7 @@ int insert_log(rule_t *packet, reason_t reason, int action, int hooknum){
 
 	//http://www.makelinux.net/books/lkd2/ch11lev1sec4
 	//want to use the atomic allocation - no sleep for this thread.
-	new_node = kmalloc(sizeof(log_node), GFP_ATOMIC);
+	new_node = kcalloc(1, sizeof(log_node), GFP_ATOMIC);
 	if (new_node == NULL){
 		printk(KERN_INFO "Error alocating log node, cannot log packet info\n");
 		return -1;
@@ -41,7 +41,6 @@ int insert_log(rule_t *packet, reason_t reason, int action, int hooknum){
 	new_log_entry->src_port=packet->src_port;
 	new_log_entry->dst_port=packet->dst_port;
 	new_log_entry->count=1;
-	printk("got to here\n");
 	//treverse the log
 	curr = log_list;
 	while (curr != NULL){
