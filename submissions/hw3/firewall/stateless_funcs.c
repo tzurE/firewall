@@ -77,7 +77,7 @@ int check_rule_exists(rule_t packet, int hooknum){
 	//we did not find any rule.
 	//block it
 	//TODO - add log!
-	printk("No rule was found. blocked.\n");
-	insert_log(&packet, REASON_NO_MATCHING_RULE, 0, hooknum);
-	return NF_DROP;
+	printk("No rule was found. Accept.\n");
+	insert_log(&packet, REASON_NO_MATCHING_RULE, 1, hooknum);
+	return NF_ACCEPT;
 }
