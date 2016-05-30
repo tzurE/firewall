@@ -1,25 +1,32 @@
 #include "hookfuncs.h"
-#include "fw.h"
-#include "stateless_funcs.h"
-#include "log.h"
 
-
-/* index 1 is for the forward hook, index 2-3 is for input/output hooks
-more on this at the Doc added */
 struct nf_hook_ops hooks[3];
 extern int firewall_activated;
+int stateful_inspection_res;
 
 int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned int hooknum, int dir){
 	rule_t packet;
 	struct iphdr *iphd;
 	struct tcphdr *tcphd;
 	struct udphdr *udphd;
+	int create_conn_res;
 
 	iphd = ip_hdr(skb);
-	//if dir = 20 then it's input. else it's 0 then it's output
-	//as shown in class and in stackoverflow (documented)
-	tcphd = (struct tcphdr *)(skb_transport_header(skb)+dir);
-	udphd = (struct udphdr *)(skb_transport_header(skb));
+	// tcphd = (struct tcphdr *)(skb_transport_header(skb)+20);
+	// udphd = (struct udphdr *)(skb_transport_header(skb));
+
+	if (skb_transport_header(skb) == (unsigned char *)iphd){
+		// printk("in if\n");
+		//http://stackoverflow.com/questions/29656012/netfilter-like-kernel-module-to-get-source-and-destination-address
+		tcphd = ((unsigned char *)iphd + (iphd->ihl * 4)); /* Skip IP hdr */
+		udphd = ((unsigned char *)iphd + (iphd->ihl * 4)); /* Skip IP hdr */
+
+	}
+	else {
+		// printk("in else\n");
+		tcphd = (struct tcphdr *)(skb_transport_header(skb));
+		udphd = (struct udphdr *)(skb_transport_header(skb));
+	}
 
 	//get ips
 	packet.src_ip = iphd->saddr;
@@ -47,7 +54,6 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 		//I chose to give it the direction - 'any', becuase it is not going to eth1 or eth2
 		packet.direction=DIRECTION_ANY;
 	}
-
 	//assign protocol
 	packet.protocol = iphd->protocol;
 	// in case firewall is off - no need to check rules. so accept all!
@@ -58,10 +64,13 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 	}
 
 	if (packet.protocol == PROT_UDP){
+		printk("prot:UDP, hooknum: %d, src: %d, dst: %d\n", packet.src_ip, packet.dst_ip);
 		packet.src_port = udphd->source;
 		packet.dst_port = udphd->dest;
 	}
+	// if we recognized a TCP packet - we transfer it to the stateful part. 
 	else if (packet.protocol == PROT_TCP){
+		printk("prot:TCP, hooknum: %d direction: %d, src: %d, dst: %d\n", hooknum ,packet.direction, packet.src_ip, packet.dst_ip);
 		packet.src_port = tcphd->source;
 		packet.dst_port = tcphd->dest;
 		if (tcphd->ack)
@@ -75,6 +84,53 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 			insert_log(&packet, REASON_XMAS_PACKET, 0, hooknum);
 			return NF_DROP;
 		}
+
+		// now to transfer it to a seperate check against the static table
+		// if we found a static rule match - we'll continue with the conn tab.
+		//ack is on, meaning this is a packet of existing connection
+		if (tcphd->ack){
+			// is there a connection for you? if so, update it.
+			stateful_inspection_res = check_statful_inspection(packet, tcphd, hooknum);
+			printk("ack on\n");
+			if (stateful_inspection_res == 1){
+				//we found a connection!
+				printk("This is a known connection, conn table updated\n");
+				return NF_ACCEPT;
+			}
+			if (stateful_inspection_res == 2){
+				//2 means we found an opposite side connection in the sent syn state
+				//if ack and syn on - this is a return answer to an already opened connection
+				printk("ack on, syn on. creating connection:\n");
+				create_new_connection(packet, 1, 1);
+				return NF_ACCEPT;
+				// no known connection found, and syn is off. 
+				printk("Error: there is an opposite conn in syn-ack state but syn is off\n");
+				return NF_DROP;
+			}
+			else if (stateful_inspection_res == -1){
+				//result is -1, drop!
+				return NF_DROP;
+			}
+		}
+		else {
+			printk("ack off, creating new connection\n");
+			// ack is off - create new connection.
+			// Check if the connection is ok with the static rules
+			if (check_rule_exists(packet, hooknum) == NF_ACCEPT){
+				if (create_new_connection(packet, 0, 1) == 1)	
+					return NF_ACCEPT;
+				else {
+					printk(KERN_ERR "Error creating new connection on connection table, Dropping packet\n");
+					return NF_DROP;
+				}
+			}
+			else {
+				//no need to write in log, already happend.
+				return NF_DROP;
+			}
+			
+		}
+
 	}
 	else if (packet.protocol == PROT_ANY){
 		packet.src_port = PORT_ANY;

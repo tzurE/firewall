@@ -8,13 +8,12 @@ int check_rule_exists(rule_t packet, int hooknum){
 	int i = 0;
 
 	for(i=0; i < num_rules; i++){
-
+		// printk("rule: %d\n", i);
 		//check direction. if no match - move to the next rule!
 		if(rules[i].direction != DIRECTION_ANY && rules[i].direction != packet.direction){
 			//not a match. next rule.
 			continue;
 		}
-
 		//had a match in direction. check ip's.
 		if(rules[i].src_ip != 0){ //if ip==0, it means any address, and we passed.
 			if ((rules[i].src_ip & rules[i].src_prefix_mask) != (packet.src_ip & rules[i].src_prefix_mask)){
@@ -32,8 +31,11 @@ int check_rule_exists(rule_t packet, int hooknum){
 		//dst ip match. check protocol:
 		//if the rule is "ANY" or OTHER, we're ok and should move on.
 		if (rules[i].protocol != PROT_ANY && rules[i].protocol != PROT_OTHER){
-
+			// printk("prot not any and not other!\n");
+			// printk("%d\n", rules[i].protocol);
+			// printk("%d\n", packet.protocol);
 			if(rules[i].protocol == packet.protocol){
+				// printk("protocol is equal to rule %d\n", i);
 				//protocol equal. check all of the cases:
 				if(packet.protocol == PROT_ICMP){
 					insert_log(&packet, i, rules[i].action, hooknum);

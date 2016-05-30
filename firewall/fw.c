@@ -1,15 +1,19 @@
 #include "fw.h"
 #include "hookfuncs.h"
 #include "stateless_funcs.h"
+#include "stateful_funcs.h"
 
 /* Device vars */
 static int major_fw_rules;
 static int major_fw_log;
+static int major_fw_conn_table;
 static int minor_rules;
 static int minor_log; 
+static int minor_conn_table;
 static struct class* fw_class = NULL;
 static struct device* fw_rules_device = NULL;
 static struct device* fw_log_device = NULL;
+static struct device* fw_conn_table_device = NULL;
 
 /* rules array table*/
 extern rule_t rules[MAX_RULES];
@@ -26,6 +30,16 @@ extern log_node *log_list;
 int left_to_read;
 char *read_log_buffer;
 char *pointer_log_buffer;
+
+/* conn_tab vars */
+extern int num_of_conns;
+extern connection_node *conn_tab_head;
+extern connection_node *conn_tab_tail;
+int left_to_read_conn;
+char *read_conn_buffer;
+char *pointer_conn_buffer;
+
+connection_node* curr_conn=NULL;
 
 int firewall_activated = 0;
 
@@ -159,7 +173,7 @@ ssize_t set_rules(struct device *dev, struct device_attribute *attr, const char 
 		rule_line = strsep(&full_rules, "\n");
 	}
 	// while(full_rules != "\0"){
-	// 	printk("%s\n", full_rules );
+	// printk("%s\n", full_rules_pointer );
 	// }
 	kfree(full_rules_pointer);
 	return count;	
@@ -336,12 +350,74 @@ static DEVICE_ATTR(log_clear, S_IRWXO, demi_clear_log ,clear_log);
 
 /******* fw_log functions and atts END *******/
 
+/******** conn_tab functions anf fops START********/
+
+ssize_t get_conn(struct file *filp, char *buff, size_t length, loff_t *off){
+	ssize_t num_of_bytes;
+	printk("reading\n");
+	num_of_bytes = (left_to_read_conn < length) ? left_to_read_conn : length;
+    if (num_of_bytes == 0) { // We check to see if there's anything to write to the user
+    	return 0;
+	}
+    if (copy_to_user(buff, pointer_conn_buffer, num_of_bytes)) { // Send the data to the user through 'copy_to_user'
+        return -EFAULT;
+    } else { // fuction succeed, we just sent the user 'num_of_bytes' bytes, so we updating the counter and the string pointer index
+        left_to_read_conn -= num_of_bytes;
+        pointer_conn_buffer += num_of_bytes;
+        return num_of_bytes;
+    }
+
+	return -EFAULT; // Should never reach here
+}
+
+ssize_t open_conn(struct inode *inode, struct file *file){
+	char buf[120]="";
+	left_to_read_conn = (num_of_conns + 1)*52;
+	
+	printk("opening fw_conn\n");
+	read_conn_buffer = kcalloc(left_to_read_conn,sizeof(char), GFP_ATOMIC);
+	
+	pointer_conn_buffer = read_conn_buffer;
+	// populate the string of connection to return to user
+
+	if (curr_conn == NULL)
+		curr_log = conn_tab_head;
+	
+	if (curr_log == NULL)
+		return 0;
+
+	while(curr_conn != NULL){
+		snprintf(buf, PAGE_SIZE, "%u ", curr_conn->conn.src_ip);
+		strcat(read_conn_buffer, buf);
+
+		snprintf(buf, PAGE_SIZE, "%u ", curr_conn->conn.dst_ip);
+		strcat(read_conn_buffer, buf);
+
+		snprintf(buf, PAGE_SIZE, "%u \n", curr_conn->conn.protocol);
+		strcat(read_conn_buffer, buf);
+
+
+	}
+	return 0;
+
+}
+
+static struct file_operations fops_conn = {
+	.write = demi_set_log,
+	.read = get_conn,
+	.open = open_conn,
+	.owner = THIS_MODULE
+};
+
+/******** conn_tab functions anf fops START********/
+
 static int __init module_init_function(void) {
 	printk(KERN_INFO "Strating Firewall module\n");
 
 	//create fw_rules device - as seen in class
 	major_fw_rules = register_chrdev(0, "fw_rules", &fops_rules);
 	major_fw_log = register_chrdev(0, "fw_log", &fops_log);
+	major_fw_conn_table = register_chrdev(0, "fw_conn_tab", &fops_conn);
 	if ((major_fw_log < 0) || (major_fw_rules < 0))
 		return -1;
 		
@@ -350,22 +426,27 @@ static int __init module_init_function(void) {
 	if (IS_ERR(fw_class)){
 		unregister_chrdev(major_fw_log, "fw_log");
 		unregister_chrdev(major_fw_rules, "fw_rules");
+		unregister_chrdev(major_fw_conn_table, "fw_conn_table");
 		return -1;
 	}
 	
 	minor_rules = MKDEV(major_fw_rules, 0);
 	minor_log = MKDEV(major_fw_log, 0);
+	minor_conn_table = MKDEV(major_fw_conn_table, 0);
+
 
 	//create rules device - as seen in class
 	fw_rules_device = device_create(fw_class, NULL, minor_rules , NULL, "fw_rules");
 	//create log device - as seen in class
 	fw_log_device = device_create(fw_class, NULL, minor_log , NULL, "fw_log");	
 
-	if (IS_ERR(fw_rules_device) || IS_ERR(fw_log_device))
-	{
+	fw_conn_table_device = device_create(fw_class, NULL, minor_conn_table , NULL, "fw_conn_table");
+
+	if (IS_ERR(fw_rules_device) || IS_ERR(fw_log_device) || IS_ERR(fw_conn_table_device)){
 		class_destroy(fw_class);
 		unregister_chrdev(major_fw_log, "fw_log");
 		unregister_chrdev(major_fw_rules, "fw_rules");
+		unregister_chrdev(major_fw_conn_table, "fw_conn_table");
 		return -1;
 	}
 	
@@ -373,9 +454,11 @@ static int __init module_init_function(void) {
 	if (device_create_file(fw_rules_device, (const struct device_attribute *)&dev_attr_rules_table.attr)){
 		device_destroy(fw_class, minor_log);
 		device_destroy(fw_class, minor_rules);
+		device_destroy(fw_class, minor_conn_table);
 		class_destroy(fw_class);
 		unregister_chrdev(major_fw_log, "fw_log");
 		unregister_chrdev(major_fw_rules, "fw_rules");
+		unregister_chrdev(major_fw_conn_table, "fw_conn_table");
 		return -1;
 	}
 	device_create_file(fw_log_device, (const struct device_attribute *)&dev_attr_log_size.attr);
@@ -396,9 +479,11 @@ static int __init module_init_function(void) {
 		device_remove_file(fw_rules_device, (const struct device_attribute *)&dev_attr_clear_rules.attr);
 		device_destroy(fw_class, minor_log);
 		device_destroy(fw_class, minor_rules);
+		device_destroy(fw_class, minor_conn_table);
 		class_destroy(fw_class);
 		unregister_chrdev(major_fw_log, "fw_log");
 		unregister_chrdev(major_fw_rules, "fw_rules");
+		unregister_chrdev(major_fw_conn_table, "fw_conn_table");
 		return -1;
 	}
 	return 0;
@@ -415,9 +500,11 @@ static void __exit module_exit_function(void) {
 	device_remove_file(fw_rules_device, (const struct device_attribute *)&dev_attr_clear_rules.attr);
 	device_destroy(fw_class, minor_log);
 	device_destroy(fw_class, minor_rules);
+	device_destroy(fw_class, minor_conn_table);
 	class_destroy(fw_class);
 	unregister_chrdev(major_fw_log, "fw_log");
 	unregister_chrdev(major_fw_rules, "fw_rules");
+	unregister_chrdev(major_fw_conn_table, "fw_conn_table");
 
 	close_hooks();
 	printk(KERN_INFO "Closing Firewall module");
