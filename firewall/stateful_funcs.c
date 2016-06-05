@@ -9,6 +9,101 @@ int command_index = 0;
 char command[900];
 
 
+connection_node* insert_new_connection(connection_node* curr_conn){
+	curr_conn->next = conn_tab_head; // Add to dynamic table
+	conn_tab_head = curr_conn;
+	return curr_conn;
+}
+
+connection_node* create_new_connection_node(rule_t packet, struct iphdr *iphd ,int ack_state, int syn_state){
+	connection *new_conn = NULL;
+	struct timeval time_stamp;
+	unsigned long time_var;
+	connection_node *new_conn_node = kmalloc(sizeof(connection_node), GFP_ATOMIC);
+	
+	if (new_conn_node == NULL){
+		(KERN_INFO "Error: could not allocate memory for new connection on the table\n");
+		return 0;
+	}
+	do_gettimeofday(&time_stamp);
+
+	new_conn = &new_conn_node->conn;
+	new_conn->src_ip	= packet.src_ip;
+	new_conn->dst_ip	= packet.dst_ip;
+	new_conn->src_port	= packet.src_port;
+	new_conn->dst_port	= packet.dst_port;
+	new_conn->id 		= iphd->id;
+	new_conn->frag_off 	= iphd->frag_off;
+	time_var = time_stamp.tv_sec;
+	new_conn->timestamp = time_var;
+
+	//this is a new connection, what type?
+	if (ntohs(packet.dst_port) == 21 || ntohs(packet.src_port) == 21){
+		if(!ack_state && syn_state)
+			new_conn->protocol=tcp_SYN_SENT_WAIT_SYN_ACK;
+		if (ack_state && syn_state)
+			new_conn->protocol=tcp_SYN_ACK_SENT_WAIT_ACK;
+		new_conn->type = FTP_HANDSHAKE;
+	}
+	else if (ntohs(packet.dst_port) == 80 || ntohs(packet.src_port) == 80){
+		if(!ack_state && syn_state)
+			new_conn->protocol=tcp_SYN_SENT_WAIT_SYN_ACK;
+		if (ack_state && syn_state)
+			new_conn->protocol=tcp_SYN_ACK_SENT_WAIT_ACK;
+		new_conn->type = HTTP_HANDSHAKE;
+	}
+	else {
+		if(!ack_state && syn_state)
+			new_conn->protocol=tcp_SYN_SENT_WAIT_SYN_ACK;
+		if (ack_state && syn_state)
+			new_conn->protocol=tcp_SYN_ACK_SENT_WAIT_ACK;
+		new_conn->type = TCP_GEN_HANDSHAKE;
+	}
+	num_of_conns++;
+
+	
+	return new_conn_node;
+}
+
+
+connection_node* create_new_connection(rule_t packet, struct iphdr *iphd, int ack_state, int syn_state){
+	return insert_new_connection(create_new_connection_node(packet, iphd, ack_state, syn_state));
+}
+
+
+int is_connection_exists(rule_t packet, struct tcphdr *tcphd){
+	connection_node *curr_conn=NULL;
+	connection *conn;
+	curr_conn=conn_tab_head;
+	while ( curr_conn != NULL){
+		conn = &curr_conn->conn; 
+		if (conn->src_ip == packet.src_ip && conn->src_port == packet.src_port && conn->dst_ip == packet.dst_ip && conn->dst_port == packet.dst_port){
+			return 1;
+		}
+		curr_conn = curr_conn->next;
+
+	}
+	return 0;
+
+}
+
+int is_connection_exists_no_packet(connection_node * new_conn){
+	connection_node *curr_conn=NULL;
+	connection *conn;
+	curr_conn=conn_tab_head;
+	while (curr_conn != NULL){
+		conn = &curr_conn->conn; 
+		if (conn->src_ip == new_conn->conn.src_ip && conn->src_port == new_conn->conn.src_port && conn->dst_ip == new_conn->conn.dst_ip && conn->dst_port == new_conn->conn.dst_port){
+			return 1;
+		}
+		curr_conn = curr_conn->next;
+
+	}
+	return 0;
+
+}
+
+
 connection_node* find_opposite_connection(rule_t packet, struct tcphdr *tcphd){
 	int i = 0;
 	connection_node *curr_conn = NULL;
@@ -131,7 +226,7 @@ int update_ftp_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *iph
 		//start buffering text
 		if (strnicmp(command, "PORT", 4) == 0){
 
-			new_conn = create_new_connection(packet, iphd, 0, 0);
+			new_conn = create_new_connection_node(packet, iphd, 0, 0);
 
 			sscanf(command, "PORT %d,%d,%d,%d,%d,%d", &ip1, &ip2, &ip3, &ip4, &port1, &port2);
 			// as seen in lecture
@@ -140,9 +235,11 @@ int update_ftp_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *iph
 			new_conn->conn.dst_port = htons(20);
 			new_conn->conn.protocol = tcp_ESTABLISHED;
 			new_conn->conn.type = FTP_TRANSFER;
+			if (!is_connection_exists_no_packet(new_conn))
+				insert_new_connection(new_conn);
 
 			//create the opposite connection
-			new_conn2 = create_new_connection(packet, iphd, 0, 0);
+			new_conn2 = create_new_connection_node(packet, iphd, 0, 0);
 
 			sscanf(command, "PORT %d,%d,%d,%d,%d,%d", &ip1, &ip2, &ip3, &ip4, &port1, &port2);
 			// as seen in lecture
@@ -152,6 +249,9 @@ int update_ftp_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *iph
 			new_conn2->conn.src_port = htons(20);
 			new_conn2->conn.protocol = tcp_ESTABLISHED;
 			new_conn2->conn.type = FTP_TRANSFER;
+
+			if (!is_connection_exists_no_packet(new_conn2))
+				insert_new_connection(new_conn2);
 
 		}
 		else if (!strnicmp(command, "QUIT", 4)) {
@@ -242,76 +342,6 @@ int close_connection(rule_t packet, struct tcphdr* tcphd, connection_node *curr_
 
 
 }
-
-connection_node* create_new_connection(rule_t packet, struct iphdr *iphd ,int ack_state, int syn_state){
-	connection *new_conn = NULL;
-	struct timeval time_stamp;
-	unsigned long time_var;
-	connection_node *new_conn_node = kmalloc(sizeof(connection_node), GFP_ATOMIC);
-	
-	if (new_conn_node == NULL){
-		(KERN_INFO "Error: could not allocate memory for new connection on the table\n");
-		return 0;
-	}
-	do_gettimeofday(&time_stamp);
-	new_conn_node->next = conn_tab_head; // Add to dynamic table
-	conn_tab_head = new_conn_node;
-
-	new_conn = &new_conn_node->conn;
-	new_conn->src_ip	= packet.src_ip;
-	new_conn->dst_ip	= packet.dst_ip;
-	new_conn->src_port	= packet.src_port;
-	new_conn->dst_port	= packet.dst_port;
-	new_conn->id 		= iphd->id;
-	new_conn->frag_off 	= iphd->frag_off;
-	time_var = time_stamp.tv_sec;
-	new_conn->timestamp = time_var;
-
-	//this is a new connection, what type?
-	if (ntohs(packet.dst_port) == 21 || ntohs(packet.src_port) == 21){
-		if(!ack_state && syn_state)
-			new_conn->protocol=tcp_SYN_SENT_WAIT_SYN_ACK;
-		if (ack_state && syn_state)
-			new_conn->protocol=tcp_SYN_ACK_SENT_WAIT_ACK;
-		new_conn->type = FTP_HANDSHAKE;
-	}
-	else if (ntohs(packet.dst_port) == 80 || ntohs(packet.src_port) == 80){
-		if(!ack_state && syn_state)
-			new_conn->protocol=tcp_SYN_SENT_WAIT_SYN_ACK;
-		if (ack_state && syn_state)
-			new_conn->protocol=tcp_SYN_ACK_SENT_WAIT_ACK;
-		new_conn->type = HTTP_HANDSHAKE;
-	}
-	else {
-		if(!ack_state && syn_state)
-			new_conn->protocol=tcp_SYN_SENT_WAIT_SYN_ACK;
-		if (ack_state && syn_state)
-			new_conn->protocol=tcp_SYN_ACK_SENT_WAIT_ACK;
-		new_conn->type = TCP_GEN_HANDSHAKE;
-	}
-	num_of_conns++;
-
-	
-	return new_conn_node;
-}
-
-int is_connection_exists(rule_t packet, struct tcphdr *tcphd){
-	connection_node *curr_conn=NULL;
-	connection *conn;
-	int i = 0;
-	curr_conn=conn_tab_head;
-	while (i < num_of_conns && curr_conn != NULL){
-		i++;
-		conn = &curr_conn->conn; 
-		if (conn->src_ip == packet.src_ip && conn->src_port == packet.src_port && conn->dst_ip == packet.dst_ip && conn->dst_port == packet.dst_port){
-			return 1;
-		}
-		curr_conn = curr_conn->next;
-
-	}
-	return 0;
-
-}
 	
 
 /* Try and find a suitable connection for this new packet. */
@@ -323,13 +353,13 @@ int check_statful_inspection(rule_t packet, struct tcphdr *tcphd, struct iphdr *
 
 	do_gettimeofday(&time_stamp);
 	curr_conn=conn_tab_head;
-	while (i < num_of_conns && curr_conn != NULL){
+	while (curr_conn != NULL){
 		i++;
 		conn = &curr_conn->conn;
 
 		//is this connection timedout?
 		// I use this to clean up connections
-		if ((time_stamp.tv_sec - conn->timestamp) > 25 && (conn->protocol != tcp_ESTABLISHED || conn->protocol == tcp_END || conn->type == FTP_TRANSFER || conn->timestamp > 25*20)){
+		if ((time_stamp.tv_sec - conn->timestamp) > 25 && (conn->protocol != tcp_ESTABLISHED || conn->protocol == tcp_END || conn->type == FTP_TRANSFER || (time_stamp.tv_sec - conn->timestamp) > 25*20)){
 			printk("connection timedout, removing it.\n");
 			num_of_conns--;
 			if(prev_conn != NULL){

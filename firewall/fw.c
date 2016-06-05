@@ -397,7 +397,7 @@ ssize_t open_conn(struct inode *inode, struct file *file){
 		return 0;
 	}
 	
-	while(i < num_of_conns && curr_conn != NULL){
+	while(curr_conn != NULL){
 		// snprintf(buf, PAGE_SIZE, "%s ", "fffffffffff");
 		// strcat(read_conn_buffer, buf);
 		i++;
@@ -440,7 +440,7 @@ ssize_t open_conn(struct inode *inode, struct file *file){
 		strcat(read_conn_buffer, buf);
 
 
-
+		prev_conn = curr_conn;
 		curr_conn = (connection_node *)curr_conn->next;
 		
 	}
