@@ -39,8 +39,6 @@ int left_to_read_conn;
 char *read_conn_buffer;
 char *pointer_conn_buffer;
 
-connection_node* curr_conn=NULL;
-
 int firewall_activated = 0;
 
 /******* fw_rules functions and atts *******/
@@ -260,6 +258,8 @@ ssize_t get_log(struct file *filp, char *buff, size_t length, loff_t *off){
 ssize_t open_log(struct inode *inode, struct file *file)	{
 	char buf[120]="";
 	left_to_read = (log_size_var + 1)*52;
+	// if (log_size_var == 0)
+	// 	left_to_read = 0;
 	//using kcalloc resets all of the array to 0, so we won't print out grbage.
 	read_log_buffer = kcalloc(left_to_read,sizeof(char), GFP_ATOMIC);
 	
@@ -342,11 +342,13 @@ ssize_t clear_log(struct device *dev, struct device_attribute *attr, const char 
 	return 1;
 } 
 
-ssize_t demi_clear_log(struct device *dev, struct device_attribute *attr, char *buf){
-	return 1;
+ssize_t get_conn_size(struct device *dev, struct device_attribute *attr, char *buf){
+	char msg[6] = "";
+	scnprintf(msg, 5, "%d\n", num_of_conns);
+	return scnprintf(buf, PAGE_SIZE, msg);
 }
 
-static DEVICE_ATTR(log_clear, S_IRWXO, demi_clear_log ,clear_log);
+static DEVICE_ATTR(log_clear, S_IRWXO, get_conn_size ,clear_log);
 
 /******* fw_log functions and atts END *******/
 
@@ -354,7 +356,7 @@ static DEVICE_ATTR(log_clear, S_IRWXO, demi_clear_log ,clear_log);
 
 ssize_t get_conn(struct file *filp, char *buff, size_t length, loff_t *off){
 	ssize_t num_of_bytes;
-	printk("reading\n");
+	
 	num_of_bytes = (left_to_read_conn < length) ? left_to_read_conn : length;
     if (num_of_bytes == 0) { // We check to see if there's anything to write to the user
     	return 0;
@@ -372,31 +374,75 @@ ssize_t get_conn(struct file *filp, char *buff, size_t length, loff_t *off){
 
 ssize_t open_conn(struct inode *inode, struct file *file){
 	char buf[120]="";
+	int i = 0;
+	connection_node* curr_conn=NULL;
+	connection_node *prev_conn = NULL;
+	struct timeval time_stamp;
+	unsigned long curr_time;
 	left_to_read_conn = (num_of_conns + 1)*52;
+	//clean list up before returning to user
+
+	do_gettimeofday(&time_stamp);
+	curr_time = (u32)time_stamp.tv_sec;
 	
-	printk("opening fw_conn\n");
 	read_conn_buffer = kcalloc(left_to_read_conn,sizeof(char), GFP_ATOMIC);
 	
 	pointer_conn_buffer = read_conn_buffer;
 	// populate the string of connection to return to user
 
 	if (curr_conn == NULL)
-		curr_log = conn_tab_head;
+		curr_conn = conn_tab_head;
 	
-	if (curr_log == NULL)
+	if (curr_conn == NULL){
 		return 0;
+	}
+	
+	while(i < num_of_conns && curr_conn != NULL){
+		// snprintf(buf, PAGE_SIZE, "%s ", "fffffffffff");
+		// strcat(read_conn_buffer, buf);
+		i++;
 
-	while(curr_conn != NULL){
+		if ((curr_time - curr_conn->conn.timestamp) > 25 && (curr_conn->conn.protocol != tcp_ESTABLISHED || curr_conn->conn.protocol == tcp_END || curr_conn->conn.type == FTP_TRANSFER || (curr_time - curr_conn->conn.timestamp) > 25*20)) {
+			if (prev_conn != NULL) {
+				prev_conn->next = curr_conn->next;
+				kfree(curr_conn);
+				curr_conn = prev_conn->next;
+			} 
+			else {
+				// This is the first rule in the list.
+				conn_tab_head = curr_conn->next;
+				kfree(curr_conn);
+				curr_conn = conn_tab_head;
+			}
+
+		num_of_conns--;
+		continue;
+		}
+		snprintf(buf, PAGE_SIZE, "%lu ", curr_conn->conn.timestamp);
+		strcat(read_conn_buffer, buf);
+		
 		snprintf(buf, PAGE_SIZE, "%u ", curr_conn->conn.src_ip);
 		strcat(read_conn_buffer, buf);
-
+		
 		snprintf(buf, PAGE_SIZE, "%u ", curr_conn->conn.dst_ip);
 		strcat(read_conn_buffer, buf);
 
-		snprintf(buf, PAGE_SIZE, "%u \n", curr_conn->conn.protocol);
+		snprintf(buf, PAGE_SIZE, "%u ", ntohs(curr_conn->conn.src_port));
+		strcat(read_conn_buffer, buf);
+
+		snprintf(buf, PAGE_SIZE, "%u ", ntohs(curr_conn->conn.dst_port));
+		strcat(read_conn_buffer, buf);
+
+		snprintf(buf, PAGE_SIZE, "%u ", curr_conn->conn.protocol);
+		strcat(read_conn_buffer, buf);
+
+		snprintf(buf, PAGE_SIZE, "%u \n", curr_conn->conn.type);
 		strcat(read_conn_buffer, buf);
 
 
+
+		curr_conn = (connection_node *)curr_conn->next;
+		
 	}
 	return 0;
 

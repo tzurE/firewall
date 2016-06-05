@@ -7,21 +7,26 @@
 
 
 typedef enum {
-	FTP_HANDSHAKE,
-	HTTP_HANDSHAKE,
-	FTP_ESTABLISHED,
-	HTTP_ESTABLISHED,
-	HTTP_END,
-	TCP_END
+	FTP_HANDSHAKE 		= 1,
+	HTTP_HANDSHAKE 		= 2,
+	FTP_ESTABLISHED 	= 3,
+	HTTP_ESTABLISHED 	= 4,
+	HTTP_END 			= 5,
+	FTP_END 			= 6,
+	TCP_GEN_HANDSHAKE 	= 7,
+	TCP_GEN_ESTABLISHED = 8,
+	TCP_GEN_END			= 9,
+	FTP_CONNECTED 		= 10,
+	HTTP_CONNECTED		= 11,
+	FTP_TRANSFER		= 12,
 } tcp_type;
 
 
 typedef enum {
-	tcp_SYN_SENT_WAIT_SYN_ACK,
-	tcp_SYN_ACK_SENT_WAIT_ACK,
-	tcp_ACK_SENT,
-	tcp_ESTABLISHED,
-	tcp_END
+	tcp_SYN_SENT_WAIT_SYN_ACK 	= 1,
+	tcp_SYN_ACK_SENT_WAIT_ACK 	= 2,
+	tcp_ESTABLISHED 		  	= 4,
+	tcp_END 				  	= 5,
 } tcp_state;
 
 // took the fields from the packet/log to create this struct
@@ -34,6 +39,8 @@ typedef struct {
 	__be16 			dst_port;
 	tcp_state 		protocol;
 	tcp_type		type;
+	__u16			id;
+	__u16			frag_off;
 	unsigned long 	timestamp;	
 } connection;
 
@@ -48,7 +55,8 @@ extern int num_of_conns;
 extern connection_node *conn_tab_head;
 extern connection_node *conn_tab_tail;
 
-int check_statful_inspection(rule_t packet, struct tcphdr *tcphd, unsigned int hooknum);
-int create_new_connection(rule_t packet, int ack_state, int syn_state);
+int check_statful_inspection(rule_t packet, struct tcphdr *tcphd, struct iphdr *iphd, unsigned int hooknum, unsigned char *tail);
+connection_node* create_new_connection(rule_t packet, struct iphdr *iphd, int ack_state, int syn_state);
+int is_connection_exists(rule_t packet, struct tcphdr *tcphd);
 
 #endif // _STATEFUL_FUNCS_H_

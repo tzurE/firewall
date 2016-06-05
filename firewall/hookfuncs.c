@@ -10,6 +10,7 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 	struct tcphdr *tcphd;
 	struct udphdr *udphd;
 	int create_conn_res;
+	unsigned char *tail;
 
 	iphd = ip_hdr(skb);
 	// tcphd = (struct tcphdr *)(skb_transport_header(skb)+20);
@@ -27,6 +28,8 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 		tcphd = (struct tcphdr *)(skb_transport_header(skb));
 		udphd = (struct udphdr *)(skb_transport_header(skb));
 	}
+	// end of packet, for parsing
+	tail = skb_tail_pointer(skb);
 
 	//get ips
 	packet.src_ip = iphd->saddr;
@@ -70,9 +73,9 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 	}
 	// if we recognized a TCP packet - we transfer it to the stateful part. 
 	else if (packet.protocol == PROT_TCP){
-		printk("prot:TCP, hooknum: %d direction: %d, src: %d, dst: %d\n", hooknum ,packet.direction, packet.src_ip, packet.dst_ip);
 		packet.src_port = tcphd->source;
 		packet.dst_port = tcphd->dest;
+		//printk("prot:TCP, hooknum: %d direction: %d, src: %d, dst: %d, s_p:%u , d_p:%u \n", hooknum ,packet.direction, packet.src_ip, packet.dst_ip, ntohs(packet.src_port), ntohs(packet.dst_port));
 		if (tcphd->ack)
 			packet.ack = ACK_YES;
 		else 
@@ -84,53 +87,57 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 			insert_log(&packet, REASON_XMAS_PACKET, 0, hooknum);
 			return NF_DROP;
 		}
-
+		stateful_inspection_res = check_statful_inspection(packet, tcphd, iphd ,hooknum, tail);
 		// now to transfer it to a seperate check against the static table
 		// if we found a static rule match - we'll continue with the conn tab.
 		//ack is on, meaning this is a packet of existing connection
 		if (tcphd->ack){
 			// is there a connection for you? if so, update it.
-			stateful_inspection_res = check_statful_inspection(packet, tcphd, hooknum);
 			printk("ack on\n");
 			if (stateful_inspection_res == 1){
 				//we found a connection!
 				printk("This is a known connection, conn table updated\n");
 				return NF_ACCEPT;
 			}
-			if (stateful_inspection_res == 2){
+			if (stateful_inspection_res == 2 && !is_connection_exists(packet, tcphd)){
 				//2 means we found an opposite side connection in the sent syn state
 				//if ack and syn on - this is a return answer to an already opened connection
 				printk("ack on, syn on. creating connection:\n");
-				create_new_connection(packet, 1, 1);
+				create_new_connection(packet, iphd ,1, 1);
 				return NF_ACCEPT;
-				// no known connection found, and syn is off. 
-				printk("Error: there is an opposite conn in syn-ack state but syn is off\n");
+				// // no known connection found, and syn is off. 
+				// printk("Error: there is an opposite conn in syn-ack state but syn is off\n");
+				// return NF_DROP;
+			}
+			if (stateful_inspection_res == -1){
+				//result is -1, drop!
+				insert_log(&packet, REASON_CONN_NOT_EXIST, 0, hooknum);
 				return NF_DROP;
 			}
-			else if (stateful_inspection_res == -1){
-				//result is -1, drop!
+			if (stateful_inspection_res == -3){
+				insert_log(&packet, REASON_CONN_NOT_COMPLINT, 0, hooknum);
 				return NF_DROP;
 			}
 		}
 		else {
-			printk("ack off, creating new connection\n");
+			printk("ack off\n");
 			// ack is off - create new connection.
 			// Check if the connection is ok with the static rules
-			if (check_rule_exists(packet, hooknum) == NF_ACCEPT){
-				if (create_new_connection(packet, 0, 1) == 1)	
-					return NF_ACCEPT;
-				else {
-					printk(KERN_ERR "Error creating new connection on connection table, Dropping packet\n");
-					return NF_DROP;
-				}
+			//first just check is this rule exists - before opening. if it exists - do not open!
+
+			if (stateful_inspection_res != 3 && (check_rule_exists(packet, hooknum) == NF_ACCEPT) && !is_connection_exists(packet, tcphd)){
+				printk("Creating new connection\n");
+				create_new_connection(packet, iphd ,0, 1);	
+				return NF_ACCEPT;
+				
 			}
 			else {
+				if (stateful_inspection_res == 3 || stateful_inspection_res == 1)
+					return NF_ACCEPT;
 				//no need to write in log, already happend.
 				return NF_DROP;
 			}
-			
 		}
-
 	}
 	else if (packet.protocol == PROT_ANY){
 		packet.src_port = PORT_ANY;

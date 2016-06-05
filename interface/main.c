@@ -9,6 +9,71 @@
 #include <arpa/inet.h>
 
 /* Basic program for reading and writing from a chardev */
+int parse_conn_line(char* conn_line, char* buff){
+	char temp[50];
+	struct sockaddr_in src_ip_struct, dst_ip_struct;
+	unsigned long timestamp;
+	int protocol, src_port, dst_port, type;
+	char *timestamp_string, *src_ip_str, *dst_ip_str, src_ip_str_dem[30];
+
+	sscanf(conn_line, "%lu %u %u %u %u %u %u", &timestamp, &src_ip_struct.sin_addr, &dst_ip_struct.sin_addr, &src_port, &dst_port, &protocol, &type);
+
+	timestamp_string = ctime((const time_t *) &timestamp);
+	timestamp_string[strlen(timestamp_string) - 1] = ' ';
+	strcat(buff, timestamp_string);
+	strcat(buff, " ");
+
+	src_ip_str = inet_ntoa(src_ip_struct.sin_addr);
+	//need to copy because inet_ntoa return actually a cons char *
+	strcpy(src_ip_str_dem, src_ip_str);
+	dst_ip_str = inet_ntoa(dst_ip_struct.sin_addr);
+	strcat(buff, src_ip_str_dem);
+	strcat(buff, " ");
+	strcat(buff, dst_ip_str);
+	sprintf(temp, " %d %d ", src_port, dst_port);
+	strcat(buff, temp);
+
+	if (protocol == 1)
+		strcat(buff, " tcp_SYN_SENT_WAIT_SYN_ACK ");
+	else if (protocol == 2)
+		strcat(buff, " tcp_SYN_ACK_SENT_WAIT_ACK ");
+	else if(protocol == 3)
+		strcat(buff, " tcp_ACK_SENT ");
+	else if (protocol == 4)
+		strcat(buff, " tcp_ESTABLISHED ");
+	else if (protocol == 5)
+		strcat(buff, " tcp_END ");
+
+	if (type == 1)
+		strcat(buff, " FTP_HANDSHAKE ");
+	else if (type == 2)
+		strcat(buff, " HTTP_HANDSHAKE ");
+	else if(type == 3)
+		strcat(buff, " FTP_ESTABLISHED ");
+	else if (type == 4)
+		strcat(buff, " HTTP_ESTABLISHED ");
+	else if (type == 5)
+		strcat(buff, " HTTP_END (will be cleaned up in 25 secs) ");
+	else if (type == 6)
+		strcat(buff, " FTP_END (will be cleaned up in 25 secs) ");
+	else if (type == 7)
+		strcat(buff, " TCP_GEN_HANDSHAKE ");
+	else if (type == 8)
+		strcat(buff, " TCP_GEN_ESTABLISHED ");
+	else if (type == 9)
+		strcat(buff, " TCP_GEN_END (will be cleaned up in 25 secs) ");
+	else if (type == 10)
+		strcat(buff, " FTP_CONNECTED ");
+	else if (type == 11)
+		strcat(buff, " HTTP_CONNECTED ");
+	else if (type == 12)
+		strcat(buff, " FTP_TRANSFER (removed automatically if not updated in 25 secs) ");
+
+	strcat(buff, "\n");
+	return 1;
+
+
+}
 
 int decode_log_line(char* log_line, char* buff){
 	char temp[30];
@@ -67,6 +132,8 @@ int decode_log_line(char* log_line, char* buff){
 		strcat(buff, "REASON_XMAS_PACKET");
 	else if (reason == -6)
 		strcat(buff, "REASON_ILLEGAL_VALUE");
+	else if(reason == -8)
+		strcat(buff, "REASON_CONN_NOT_EXIST");
 	else {
 		sprintf(temp, " %d ", reason);
 		strcat(buff, temp);
@@ -304,7 +371,6 @@ int main(int argc, const char *argv[]) {
 	char buff[200]="";
 	char full_rules[4090]="";
 	char *rule_line=NULL;
-
 	if (argc < 2 ){
 		printf ("error! wrong number of args! must use a command \n");
 		return 0;
@@ -482,6 +548,50 @@ int main(int argc, const char *argv[]) {
 		write(fd, "c", 2);
 		close(fd);
 		return 1;
+
+	}
+
+	else if (strcmp(argv[1], "show_connection_table") == 0){
+		int sizefd, conn_size;
+		char conn_size_str[16];
+		char* conn_to_user=NULL;
+		char* conn_to_user_pointer=NULL;
+		char* conn_line;
+		fd = open("/dev/fw_conn_table", O_RDONLY);
+		if (fd < 0){
+			printf("Error opening connections device, please make sure it exists\n");
+			return -1;
+		}
+		//get conn table size. used another one for the size:
+		sizefd = open("/sys/class/fw/fw_log/log_clear", O_RDONLY);
+		if (sizefd < 0){
+			printf("Error getting number of connections.\n");
+			return -1;
+		}
+		read(sizefd, conn_size_str, 16);
+		sscanf(conn_size_str, "%d", &conn_size);
+		conn_to_user = calloc(conn_size*80, sizeof(char));
+		conn_to_user_pointer=conn_to_user;
+
+		while (read(fd, buff, 190) != 0){
+			strcat(conn_to_user, buff);
+			strcpy(buff, "");
+		}
+		printf("<Timestamp> <Source_IP> <Dest_IP> <Source_port> <Dest_port> <protocol/state> <Type>\n");
+		conn_line = strsep(&conn_to_user, "\n");
+		strcpy(buff, "");
+		while (conn_to_user != NULL){
+			parse_conn_line(conn_line, buff);
+			printf("%s", buff);
+			conn_line = strsep(&conn_to_user, "\n");
+			strcpy(buff, "");
+
+		}
+		free(conn_to_user_pointer);
+		return 1;
+
+	}
+	else if (strcmp(argv[1], "show_hosts") == 0){
 
 	}
 	return 1;
