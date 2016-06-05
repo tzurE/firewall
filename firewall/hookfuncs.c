@@ -90,7 +90,7 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 		stateful_inspection_res = check_statful_inspection(packet, tcphd, iphd ,hooknum, tail);
 		// now to transfer it to a seperate check against the static table
 		// if we found a static rule match - we'll continue with the conn tab.
-		//ack is on, meaning this is a packet of existing connection
+		//ack is on, meaning this is a packet of existing connection. no need to go through static rules!
 		if (tcphd->ack){
 			// is there a connection for you? if so, update it.
 			printk("ack on\n");
@@ -101,13 +101,10 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 			}
 			if (stateful_inspection_res == 2 && !is_connection_exists(packet, tcphd)){
 				//2 means we found an opposite side connection in the sent syn state
-				//if ack and syn on - this is a return answer to an already opened connection
+				//if ack and syn on - this is a return answer to an already opened connection, and the connection does not exists.
 				printk("ack on, syn on. creating connection:\n");
 				create_new_connection(packet, iphd ,1, 1);
 				return NF_ACCEPT;
-				// // no known connection found, and syn is off. 
-				// printk("Error: there is an opposite conn in syn-ack state but syn is off\n");
-				// return NF_DROP;
 			}
 			if (stateful_inspection_res == -1){
 				//result is -1, drop!
@@ -123,8 +120,7 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 			printk("ack off\n");
 			// ack is off - create new connection.
 			// Check if the connection is ok with the static rules
-			//first just check is this rule exists - before opening. if it exists - do not open!
-
+			//first just check is this connection exists - before opening. if it exists - do not open!
 			if (stateful_inspection_res != 3 && (check_rule_exists(packet, hooknum) == NF_ACCEPT) && !is_connection_exists(packet, tcphd)){
 				printk("Creating new connection\n");
 				create_new_connection(packet, iphd ,0, 1);	
@@ -132,6 +128,7 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 				
 			}
 			else {
+				//3 meaning this is a duplicate, 1 meaning this is an already exists connection with ack off (transfer opens them automaticly)
 				if (stateful_inspection_res == 3 || stateful_inspection_res == 1)
 					return NF_ACCEPT;
 				//no need to write in log, already happend.

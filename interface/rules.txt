@@ -1,5 +1,6 @@
 loopback any 127.0.0.1/8 127.0.0.1/8 any any any any accept
-tcp_stuff any any any TCP any any any accept
+tcp_block any any any TCP 20 20 any drop
+tcp_allow any any any TCP any any any accept
 GW_attack any any 10.0.2.15 any any any any drop
 ping1 any 10.0.1.1/24 10.0.2.2 ICMP any any any accept
 ping2 any 10.0.2.2/24 10.0.1.1/24 ICMP any any any accept
