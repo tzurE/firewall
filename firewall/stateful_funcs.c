@@ -1,12 +1,19 @@
 #include "stateful_funcs.h"
 
+
+//externs
 int num_of_conns=0;
 connection_node *conn_tab_head = NULL;
 connection_node *conn_tab_tail=NULL;
+char *hosts_list = NULL;
+
 
 //globals
-int command_index = 0;
-char command[900];
+int ftp_command_index = 0;
+int http_command_index = 0;
+
+char ftp_command[900];
+char *http_command=NULL;
 
 
 connection_node* insert_new_connection(connection_node* curr_conn){
@@ -22,7 +29,7 @@ connection_node* create_new_connection_node(rule_t packet, struct iphdr *iphd ,i
 	connection_node *new_conn_node = kmalloc(sizeof(connection_node), GFP_ATOMIC);
 	
 	if (new_conn_node == NULL){
-		(KERN_INFO "Error: could not allocate memory for new connection on the table\n");
+		printk(KERN_INFO "Error: could not allocate memory for new connection on the table\n");
 		return 0;
 	}
 	do_gettimeofday(&time_stamp);
@@ -133,8 +140,10 @@ int update_syn_sent(rule_t packet, struct tcphdr* tcphd, connection_node *curr_c
 			conn->type = HTTP_ESTABLISHED;
 		}
 	}
-	else // why is the ack off? fishy. drop it.
+	else { // why is the ack off? fishy. drop it.
+		printk("dropping\n");
 		return -1;
+	}
 	return 1;
 }
 
@@ -169,18 +178,17 @@ int update_ftp_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *iph
 	int end_of_command = 0;
 	int	ip1, ip2, ip3, ip4, port1, port2;
 
-
 	// handle fragmatation. accumulate chars to a buffer as seen here: (this is how i get the idea)
 	// http://stackoverflow.com/questions/29553990/print-tcp-packet-data
 	for (it = user_data; it != tail; ++it) {
         char c = *(char *)it;
 
-        command[command_index] = c;
-        command_index++;
+        ftp_command[ftp_command_index] = c;
+        ftp_command_index++;
 
         if (c == '\0'){
         	end_of_command = 1;
-        	command_index = 0;
+        	ftp_command_index = 0;
         	break;
         }
 
@@ -188,35 +196,32 @@ int update_ftp_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *iph
         	end_of_command = 2;
         else if (c == 0x0a && end_of_command == 2){
         	end_of_command = 1;
-        	command_index = 0;
+        	ftp_command_index = 0;
         	break;
         }
-        if (command_index == 899){
-        	strcpy(command, "");
-        	command_index = 0;
+        if (ftp_command_index == 899){
+        	strcpy(ftp_command, "");
+        	ftp_command_index = 0;
         	printk("illegal ftp command. dropping packet!");
         	return -3;
         }
 	}
 	if(end_of_command == 0){
-		printk("command not ended!\n");
-		// 
+		// command not ended, saving for next packet
 		return 1;
 	}
 
 	do_gettimeofday(&time_stamp);
 	curr_time = time_stamp.tv_sec;
-	printk("type:%u ", conn->type);
-	printk("command%s \n", command);
 	if (conn->type == FTP_ESTABLISHED){
 	// 230 means user is connected, as stated here - https://en.wikipedia.org/wiki/List_of_FTP_server_return_codes
-		if (strnicmp(command, "230", 3) == 0){	
+		if (strnicmp(ftp_command, "230", 3) == 0){	
 			printk("FTP connected\n");
 			conn->type = FTP_CONNECTED;
 			opposite_conn = find_opposite_connection(packet, tcphd);
 			opposite_conn->conn.type = FTP_CONNECTED;
 		}
-		else if (strnicmp(command, "QUIT", 4) == 0) {
+		else if (strnicmp(ftp_command, "QUIT", 4) == 0) {
 			conn->type = FTP_END;
 			conn->protocol = tcp_END;
 		}
@@ -224,11 +229,11 @@ int update_ftp_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *iph
 	else if(conn->type == FTP_CONNECTED) {
 
 		//start buffering text
-		if (strnicmp(command, "PORT", 4) == 0){
+		if (strnicmp(ftp_command, "PORT", 4) == 0){
 
 			new_conn = create_new_connection_node(packet, iphd, 0, 0);
 
-			sscanf(command, "PORT %d,%d,%d,%d,%d,%d", &ip1, &ip2, &ip3, &ip4, &port1, &port2);
+			sscanf(ftp_command, "PORT %d,%d,%d,%d,%d,%d", &ip1, &ip2, &ip3, &ip4, &port1, &port2);
 			// as seen in lecture
 			new_conn->conn.src_ip 	= ntohl((ip1<<24) + (ip2<<16) + (ip3<<8) + ip4);
 			new_conn->conn.src_port = htons((port1 * 256) + port2);
@@ -237,11 +242,13 @@ int update_ftp_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *iph
 			new_conn->conn.type = FTP_TRANSFER;
 			if (!is_connection_exists_no_packet(new_conn))
 				insert_new_connection(new_conn);
+			else
+				kfree(new_conn);
 
 			//create the opposite connection
 			new_conn2 = create_new_connection_node(packet, iphd, 0, 0);
 
-			sscanf(command, "PORT %d,%d,%d,%d,%d,%d", &ip1, &ip2, &ip3, &ip4, &port1, &port2);
+			sscanf(ftp_command, "PORT %d,%d,%d,%d,%d,%d", &ip1, &ip2, &ip3, &ip4, &port1, &port2);
 			// as seen in lecture
 			new_conn2->conn.src_ip = new_conn->conn.dst_ip;
 			new_conn2->conn.dst_ip 	= ntohl((ip1<<24) + (ip2<<16) + (ip3<<8) + ip4);
@@ -252,9 +259,11 @@ int update_ftp_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *iph
 
 			if (!is_connection_exists_no_packet(new_conn2))
 				insert_new_connection(new_conn2);
+			else
+				kfree(new_conn2);
 
 		}
-		else if (!strnicmp(command, "QUIT", 4)) {
+		else if (strnicmp(ftp_command, "QUIT", 4) == 0) {
 			conn->type = FTP_END;
 			conn->protocol = tcp_END;
 		}
@@ -267,21 +276,71 @@ int update_ftp_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *iph
 	}
 	else if (conn->type == FTP_END){
 		if (!tcphd->fin){
-			strcpy(command, "");
+			strcpy(ftp_command, "");
 			return -1;
 		}
 	}
 
 	
-	memset(&command[0], 0, sizeof(command));
+	memset(&ftp_command[0], 0, sizeof(ftp_command));
 	conn->timestamp = curr_time;
 	return 1;
 
 } 
 
-int update_http_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *iphd ,connection_node *curr_conn, unsigned char *tail) {
+int update_http_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *iphd ,connection_node *curr_conn, unsigned char *tail, struct sk_buff *skb) {
+	connection *conn = &curr_conn->conn;
+	struct timeval time_stamp;
+	unsigned long curr_time;
+	int found_host = 0, i = 0, result = 1;
+	int http_command_offset = iphd->ihl*4 + tcphd->doff*4; 
+	int http_command_length = skb->len - http_command_offset;
+	unsigned char *command_pointer;
+	unsigned char *line = NULL;
 
-	return 1;
+	// handle fragmatation. accumulate chars to a buffer as seen here: (this is how i get the idea)
+	// http://stackoverflow.com/questions/29553990/print-tcp-packet-data
+	http_command =  kmalloc(http_command_length + 1, GFP_ATOMIC);
+	skb_copy_bits(skb, http_command_offset , (void*)http_command, http_command_length);
+	command_pointer = http_command;
+	// if(end_of_command == 0){
+	// 	// command not ended, saving for next packet
+	// 	return 1;
+	// }
+	if (conn->type == HTTP_ESTABLISHED){
+		// printk("HTTP_ESTABLISHED!!\n");
+		if (strnicmp(http_command, "GET", 3) == 0 ){
+			conn->type = HTTP_GET;
+			line = strsep(&http_command, "\n");
+			//search for host and compare it to the list we have
+			while (http_command != NULL && !found_host){
+				i++;
+				printk("%s\n", line);
+				if(strnicmp(line, "Host: ", 6) == 0){
+					found_host = 1;
+					printk("found host! host is:");
+					printk("%s\n", line + 6);
+				}
+				else if (i > 9){
+					printk("Get packet is not a regular get packet. parsing stops\n");
+					break;
+
+				}
+				line = strsep(&http_command, "\n");
+			}
+
+
+		}
+
+	}
+	else if (conn->type == HTTP_GET){
+
+	}
+	else if (conn->type == HTTP_CONNECTED){
+
+	}
+	kfree(http_command);	
+	return result;
 
 }
 
@@ -291,7 +350,7 @@ int update_gen_connection(rule_t packet, struct tcphdr* tcphd, connection_node *
 
 }
 
-int update_connection(rule_t packet, struct tcphdr* tcphd,struct iphdr *iphd ,connection_node *curr_conn, unsigned char *tail){
+int update_connection(rule_t packet, struct tcphdr* tcphd,struct iphdr *iphd ,connection_node *curr_conn, unsigned char *tail, struct sk_buff *skb){
 	switch(curr_conn->conn.protocol){
 		break;
 		case tcp_SYN_SENT_WAIT_SYN_ACK:
@@ -307,7 +366,7 @@ int update_connection(rule_t packet, struct tcphdr* tcphd,struct iphdr *iphd ,co
 				return update_ftp_connection(packet, tcphd, iphd ,curr_conn, tail);
 			}
 			else if(curr_conn->conn.type == HTTP_ESTABLISHED || curr_conn->conn.type == HTTP_CONNECTED || curr_conn->conn.type == HTTP_END){
-				return update_http_connection(packet, tcphd, iphd ,curr_conn, tail);
+				return update_http_connection(packet, tcphd, iphd ,curr_conn, tail, skb);
 			}
 			else {
 				update_gen_connection(packet, tcphd ,curr_conn);
@@ -345,7 +404,7 @@ int close_connection(rule_t packet, struct tcphdr* tcphd, connection_node *curr_
 	
 
 /* Try and find a suitable connection for this new packet. */
-int check_statful_inspection(rule_t packet, struct tcphdr *tcphd, struct iphdr *iphd ,unsigned int hooknum, unsigned char *tail){
+int check_statful_inspection(rule_t packet, struct tcphdr *tcphd, struct iphdr *iphd ,unsigned int hooknum, unsigned char *tail, struct sk_buff *skb){
 	struct timeval time_stamp;
 	connection_node *curr_conn=NULL, *prev_conn=NULL;
 	connection *conn;
@@ -360,7 +419,7 @@ int check_statful_inspection(rule_t packet, struct tcphdr *tcphd, struct iphdr *
 		//is this connection timedout?
 		// I use this to clean up connections
 		if ((time_stamp.tv_sec - conn->timestamp) > 25 && (conn->protocol != tcp_ESTABLISHED || conn->protocol == tcp_END || conn->type == FTP_TRANSFER || (time_stamp.tv_sec - conn->timestamp) > 25*20)){
-			printk("connection timedout, removing it.\n");
+			printk("connection timeout, removing it.\n");
 			num_of_conns--;
 			if(prev_conn != NULL){
 				prev_conn->next = curr_conn->next;
@@ -385,7 +444,7 @@ int check_statful_inspection(rule_t packet, struct tcphdr *tcphd, struct iphdr *
 				close_connection(packet, tcphd, curr_conn);
 			}
 			else 
-				return update_connection(packet, tcphd, iphd ,curr_conn, tail);
+				return update_connection(packet, tcphd, iphd ,curr_conn, tail, skb);
 		}
 		// seperate this. if No connection - then look for opposite one.
 		//opposite connection! probably syn ack

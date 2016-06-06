@@ -9,7 +9,6 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 	struct iphdr *iphd;
 	struct tcphdr *tcphd;
 	struct udphdr *udphd;
-	int create_conn_res;
 	unsigned char *tail;
 
 	iphd = ip_hdr(skb);
@@ -19,8 +18,8 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 	if (skb_transport_header(skb) == (unsigned char *)iphd){
 		// printk("in if\n");
 		//http://stackoverflow.com/questions/29656012/netfilter-like-kernel-module-to-get-source-and-destination-address
-		tcphd = ((unsigned char *)iphd + (iphd->ihl * 4)); /* Skip IP hdr */
-		udphd = ((unsigned char *)iphd + (iphd->ihl * 4)); /* Skip IP hdr */
+		tcphd = (struct tcphdr *)((unsigned char *)iphd + (iphd->ihl * 4)); /* Skip IP hdr */
+		udphd = (struct udphdr *)((unsigned char *)iphd + (iphd->ihl * 4)); /* Skip IP hdr */
 
 	}
 	else {
@@ -67,7 +66,7 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 	}
 
 	if (packet.protocol == PROT_UDP){
-		printk("prot:UDP, hooknum: %d, src: %d, dst: %d\n", packet.src_ip, packet.dst_ip);
+		// printk("prot:UDP, hooknum: %d, src: %d, dst: %d\n", packet.src_ip, packet.dst_ip);
 		packet.src_port = udphd->source;
 		packet.dst_port = udphd->dest;
 	}
@@ -75,7 +74,7 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 	else if (packet.protocol == PROT_TCP){
 		packet.src_port = tcphd->source;
 		packet.dst_port = tcphd->dest;
-		//printk("prot:TCP, hooknum: %d direction: %d, src: %d, dst: %d, s_p:%u , d_p:%u \n", hooknum ,packet.direction, packet.src_ip, packet.dst_ip, ntohs(packet.src_port), ntohs(packet.dst_port));
+		printk("prot:TCP, hooknum: %d direction: %d, src: %d, dst: %d, s_p:%u , d_p:%u \n", hooknum ,packet.direction, packet.src_ip, packet.dst_ip, ntohs(packet.src_port), ntohs(packet.dst_port));
 		if (tcphd->ack)
 			packet.ack = ACK_YES;
 		else 
@@ -87,22 +86,23 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 			insert_log(&packet, REASON_XMAS_PACKET, 0, hooknum);
 			return NF_DROP;
 		}
-		stateful_inspection_res = check_statful_inspection(packet, tcphd, iphd ,hooknum, tail);
+		stateful_inspection_res = check_statful_inspection(packet, tcphd, iphd ,hooknum, tail, skb);
+		printk("res = %d\n", stateful_inspection_res);
 		// now to transfer it to a seperate check against the static table
 		// if we found a static rule match - we'll continue with the conn tab.
 		//ack is on, meaning this is a packet of existing connection. no need to go through static rules!
 		if (tcphd->ack){
 			// is there a connection for you? if so, update it.
-			printk("ack on\n");
+			// printk("ack on\n");
 			if (stateful_inspection_res == 1){
 				//we found a connection!
-				printk("This is a known connection, conn table updated\n");
+				// printk("This is a known connection, conn table updated\n");
 				return NF_ACCEPT;
 			}
 			if (stateful_inspection_res == 2 && !is_connection_exists(packet, tcphd)){
 				//2 means we found an opposite side connection in the sent syn state
 				//if ack and syn on - this is a return answer to an already opened connection, and the connection does not exists.
-				printk("ack on, syn on. creating connection:\n");
+				// printk("ack on, syn on. creating connection:\n");
 				create_new_connection(packet, iphd ,1, 1);
 				return NF_ACCEPT;
 			}
@@ -117,7 +117,7 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 			}
 		}
 		else {
-			printk("ack off\n");
+			// printk("ack off\n");
 			// ack is off - create new connection.
 			// Check if the connection is ok with the static rules
 			//first just check is this connection exists - before opening. if it exists - do not open!

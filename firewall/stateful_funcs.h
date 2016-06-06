@@ -19,6 +19,7 @@ typedef enum {
 	FTP_CONNECTED 		= 10,
 	HTTP_CONNECTED		= 11,
 	FTP_TRANSFER		= 12,
+	HTTP_GET			= 13,
 } tcp_type;
 
 
@@ -54,8 +55,9 @@ typedef struct connection_node {
 extern int num_of_conns;
 extern connection_node *conn_tab_head;
 extern connection_node *conn_tab_tail;
+extern char *hosts_list;
 
-int check_statful_inspection(rule_t packet, struct tcphdr *tcphd, struct iphdr *iphd, unsigned int hooknum, unsigned char *tail);
+int check_statful_inspection(rule_t packet, struct tcphdr *tcphd, struct iphdr *iphd, unsigned int hooknum, unsigned char *tail, struct sk_buff *skb);
 connection_node* create_new_connection(rule_t packet, struct iphdr *iphd, int ack_state, int syn_state);
 int is_connection_exists(rule_t packet, struct tcphdr *tcphd);
 

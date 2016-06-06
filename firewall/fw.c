@@ -41,6 +41,12 @@ char *pointer_conn_buffer;
 
 int firewall_activated = 0;
 
+/* Hosts */
+static int major_hosts;
+static int minor_hosts;
+static struct device* hosts_device = NULL;
+extern char *hosts_list;
+char* hosts_list_to_user;
 /******* fw_rules functions and atts *******/
 ssize_t get_rules(struct device *dev, struct device_attribute *attr, char *buf)	{
 	return scnprintf(buf, PAGE_SIZE, rules_raw);
@@ -234,6 +240,31 @@ static DEVICE_ATTR(rules_size, S_IRWXO , get_rules_size, rules_size_demi);
 static DEVICE_ATTR(clear_rules, S_IRWXO , clear_demi, clear_rule_list);
 /******* fw_rules functions and atts end*******/
 
+/******* fw hosts device ******/
+
+ssize_t get_hosts(struct device *dev, struct device_attribute *attr, char *buf)	{
+	if (hosts_list == NULL)
+		return scnprintf(buf, PAGE_SIZE, "\n");
+	return scnprintf(buf, PAGE_SIZE, hosts_list);
+}
+
+ssize_t set_hosts(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)	{
+
+	hosts_list = kcalloc(count + 1, sizeof(char),GFP_ATOMIC);
+	hosts_list_to_user = kcalloc(count + 1, sizeof(char),GFP_ATOMIC);
+	strcpy(hosts_list, buf);
+	strcpy(hosts_list_to_user, buf);
+	return count;	
+}
+
+//using sysfs to access it
+static DEVICE_ATTR(hosts, S_IRWXO , get_hosts, set_hosts);
+
+static struct file_operations fops_hosts = {
+	.owner = THIS_MODULE
+};
+
+/******* end FW hosts *******/
 
 
 /******* fw_log functions and atts and size *******/
@@ -464,7 +495,8 @@ static int __init module_init_function(void) {
 	major_fw_rules = register_chrdev(0, "fw_rules", &fops_rules);
 	major_fw_log = register_chrdev(0, "fw_log", &fops_log);
 	major_fw_conn_table = register_chrdev(0, "fw_conn_tab", &fops_conn);
-	if ((major_fw_log < 0) || (major_fw_rules < 0))
+	major_hosts = register_chrdev(0, "hosts", &fops_hosts);
+	if ((major_fw_log < 0) || (major_fw_rules < 0) || (major_hosts < 0))
 		return -1;
 		
 	//create fw class - as seen in class
@@ -473,12 +505,14 @@ static int __init module_init_function(void) {
 		unregister_chrdev(major_fw_log, "fw_log");
 		unregister_chrdev(major_fw_rules, "fw_rules");
 		unregister_chrdev(major_fw_conn_table, "fw_conn_table");
+		unregister_chrdev(major_hosts, "hosts");
 		return -1;
 	}
 	
 	minor_rules = MKDEV(major_fw_rules, 0);
 	minor_log = MKDEV(major_fw_log, 0);
 	minor_conn_table = MKDEV(major_fw_conn_table, 0);
+	minor_hosts = MKDEV(major_hosts, 0);
 
 
 	//create rules device - as seen in class
@@ -488,11 +522,14 @@ static int __init module_init_function(void) {
 
 	fw_conn_table_device = device_create(fw_class, NULL, minor_conn_table , NULL, "fw_conn_table");
 
-	if (IS_ERR(fw_rules_device) || IS_ERR(fw_log_device) || IS_ERR(fw_conn_table_device)){
+	hosts_device = device_create(fw_class, NULL, minor_hosts , NULL, "hosts");
+
+	if (IS_ERR(fw_rules_device) || IS_ERR(fw_log_device) || IS_ERR(fw_conn_table_device) ||IS_ERR(hosts_device) ){
 		class_destroy(fw_class);
 		unregister_chrdev(major_fw_log, "fw_log");
 		unregister_chrdev(major_fw_rules, "fw_rules");
 		unregister_chrdev(major_fw_conn_table, "fw_conn_table");
+		unregister_chrdev(major_hosts, "hosts");
 		return -1;
 	}
 	
@@ -501,10 +538,12 @@ static int __init module_init_function(void) {
 		device_destroy(fw_class, minor_log);
 		device_destroy(fw_class, minor_rules);
 		device_destroy(fw_class, minor_conn_table);
+		device_destroy(fw_class, minor_hosts);
 		class_destroy(fw_class);
 		unregister_chrdev(major_fw_log, "fw_log");
 		unregister_chrdev(major_fw_rules, "fw_rules");
 		unregister_chrdev(major_fw_conn_table, "fw_conn_table");
+		unregister_chrdev(major_hosts, "hosts");
 		return -1;
 	}
 	device_create_file(fw_log_device, (const struct device_attribute *)&dev_attr_log_size.attr);
@@ -512,6 +551,7 @@ static int __init module_init_function(void) {
 	device_create_file(fw_rules_device, (const struct device_attribute *)&dev_attr_rules_size.attr);
 	device_create_file(fw_log_device, (const struct device_attribute *)&dev_attr_log_clear.attr);
 	device_create_file(fw_rules_device, (const struct device_attribute *)&dev_attr_clear_rules.attr);
+	device_create_file(hosts_device, (const struct device_attribute *)&dev_attr_hosts.attr);
 
 	if (start_hooks() == -1 ){
 		printk(KERN_INFO "Register hook failed. existing..");
@@ -523,13 +563,17 @@ static int __init module_init_function(void) {
 		device_remove_file(fw_log_device, (const struct device_attribute *)&dev_attr_log_clear.attr);
 		device_remove_file(fw_log_device, (const struct device_attribute *)&dev_attr_log_size.attr);
 		device_remove_file(fw_rules_device, (const struct device_attribute *)&dev_attr_clear_rules.attr);
+		device_remove_file(hosts_device, (const struct device_attribute *)&dev_attr_hosts.attr);
 		device_destroy(fw_class, minor_log);
 		device_destroy(fw_class, minor_rules);
 		device_destroy(fw_class, minor_conn_table);
+		device_destroy(fw_class, minor_hosts);
+
 		class_destroy(fw_class);
 		unregister_chrdev(major_fw_log, "fw_log");
 		unregister_chrdev(major_fw_rules, "fw_rules");
 		unregister_chrdev(major_fw_conn_table, "fw_conn_table");
+		unregister_chrdev(major_hosts, "hosts");
 		return -1;
 	}
 	return 0;
@@ -544,14 +588,22 @@ static void __exit module_exit_function(void) {
 	device_remove_file(fw_log_device, (const struct device_attribute *)&dev_attr_log_clear.attr);
 	device_remove_file(fw_log_device, (const struct device_attribute *)&dev_attr_log_size.attr);
 	device_remove_file(fw_rules_device, (const struct device_attribute *)&dev_attr_clear_rules.attr);
+	device_remove_file(hosts_device, (const struct device_attribute *)&dev_attr_hosts.attr);
 	device_destroy(fw_class, minor_log);
 	device_destroy(fw_class, minor_rules);
 	device_destroy(fw_class, minor_conn_table);
+	device_destroy(fw_class, minor_hosts);
 	class_destroy(fw_class);
 	unregister_chrdev(major_fw_log, "fw_log");
 	unregister_chrdev(major_fw_rules, "fw_rules");
 	unregister_chrdev(major_fw_conn_table, "fw_conn_table");
+	unregister_chrdev(major_hosts, "hosts");
+	if (hosts_list_to_user != NULL){
+		kfree(hosts_list_to_user);
+	}
 
+	if (log_size_var != 0)
+		clear_main_log();
 	close_hooks();
 	printk(KERN_INFO "Closing Firewall module");
 } 

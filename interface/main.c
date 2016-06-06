@@ -370,6 +370,7 @@ int main(int argc, const char *argv[]) {
 	int fd, fd2, count;
 	char buff[200]="";
 	char full_rules[4090]="";
+	char *full_hosts=NULL;
 	char *rule_line=NULL;
 	if (argc < 2 ){
 		printf ("error! wrong number of args! must use a command \n");
@@ -592,6 +593,43 @@ int main(int argc, const char *argv[]) {
 
 	}
 	else if (strcmp(argv[1], "show_hosts") == 0){
+
+	}
+	else if (strcmp(argv[1], "load_hosts") == 0){
+		int buff_size;
+		fd = open("/sys/class/fw/hosts/hosts", O_WRONLY);
+		if (fd < 0 ){
+			printf("error opening sysfs device hos. check if it exists\n" );
+			return -1;
+		}
+		FILE *hosts_file = fopen(argv[2], "r");
+
+		if (hosts_file==NULL){
+			perror("Error opening file! check that it exists and we have permissions!");
+			close(fd);
+			return -1;
+		}
+
+		char line[100]={0,};
+		int c;
+		while (c=fgetc(hosts_file)){
+			buff_size++;
+			if (c == EOF)
+				break;
+		}
+		rewind(hosts_file);
+		printf("%d\n", buff_size);
+		full_hosts = (char*)malloc(sizeof(char)*buff_size);
+		while(fgets(line, 100, hosts_file) != NULL){
+			strcat(full_hosts, line);			
+		}
+		printf("%s\n", full_hosts);
+		strcat(full_hosts, "\n");
+		write(fd, full_hosts, strlen(full_hosts));
+		free(full_hosts);
+		fclose(hosts_file);
+		close(fd);
+		return;
 
 	}
 	return 1;
