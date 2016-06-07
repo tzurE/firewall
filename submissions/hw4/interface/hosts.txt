@@ -2,4 +2,3 @@ www.google.co.il
 course.cs.tau.ac.il
 www.ynet.co.il
 sf.exposebox.com
-host2

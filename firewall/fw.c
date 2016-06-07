@@ -505,7 +505,7 @@ static int __init module_init_function(void) {
 	if (IS_ERR(fw_class)){
 		unregister_chrdev(major_fw_log, "fw_log");
 		unregister_chrdev(major_fw_rules, "fw_rules");
-		unregister_chrdev(major_fw_conn_table, "fw_conn_table");
+		unregister_chrdev(major_fw_conn_table, "fw_conn_tab");
 		unregister_chrdev(major_hosts, "hosts");
 		return -1;
 	}
@@ -521,7 +521,7 @@ static int __init module_init_function(void) {
 	//create log device - as seen in class
 	fw_log_device = device_create(fw_class, NULL, minor_log , NULL, "fw_log");	
 
-	fw_conn_table_device = device_create(fw_class, NULL, minor_conn_table , NULL, "fw_conn_table");
+	fw_conn_table_device = device_create(fw_class, NULL, minor_conn_table , NULL, "fw_conn_tab");
 
 	hosts_device = device_create(fw_class, NULL, minor_hosts , NULL, "hosts");
 
@@ -529,7 +529,7 @@ static int __init module_init_function(void) {
 		class_destroy(fw_class);
 		unregister_chrdev(major_fw_log, "fw_log");
 		unregister_chrdev(major_fw_rules, "fw_rules");
-		unregister_chrdev(major_fw_conn_table, "fw_conn_table");
+		unregister_chrdev(major_fw_conn_table, "fw_conn_tab");
 		unregister_chrdev(major_hosts, "hosts");
 		return -1;
 	}
@@ -543,7 +543,7 @@ static int __init module_init_function(void) {
 		class_destroy(fw_class);
 		unregister_chrdev(major_fw_log, "fw_log");
 		unregister_chrdev(major_fw_rules, "fw_rules");
-		unregister_chrdev(major_fw_conn_table, "fw_conn_table");
+		unregister_chrdev(major_fw_conn_table, "fw_conn_tab");
 		unregister_chrdev(major_hosts, "hosts");
 		return -1;
 	}
@@ -573,7 +573,7 @@ static int __init module_init_function(void) {
 		class_destroy(fw_class);
 		unregister_chrdev(major_fw_log, "fw_log");
 		unregister_chrdev(major_fw_rules, "fw_rules");
-		unregister_chrdev(major_fw_conn_table, "fw_conn_table");
+		unregister_chrdev(major_fw_conn_table, "fw_conn_tab");
 		unregister_chrdev(major_hosts, "hosts");
 		return -1;
 	}
@@ -597,7 +597,7 @@ static void __exit module_exit_function(void) {
 	class_destroy(fw_class);
 	unregister_chrdev(major_fw_log, "fw_log");
 	unregister_chrdev(major_fw_rules, "fw_rules");
-	unregister_chrdev(major_fw_conn_table, "fw_conn_table");
+	unregister_chrdev(major_fw_conn_table, "fw_conn_tab");
 	unregister_chrdev(major_hosts, "hosts");
 	if (hosts_list_to_user != NULL){
 		kfree(hosts_list_to_user);

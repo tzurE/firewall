@@ -560,12 +560,12 @@ int main(int argc, const char *argv[]) {
 		char* conn_to_user=NULL;
 		char* conn_to_user_pointer=NULL;
 		char* conn_line;
-		fd = open("/dev/fw_conn_table", O_RDONLY);
+		fd = open("/dev/fw_conn_tab", O_RDONLY);
 		if (fd < 0){
 			printf("Error opening connections device, please make sure it exists\n");
 			return -1;
 		}
-		//get conn table size. used another one for the size:
+		//get conn table size. used another device for the size:
 		sizefd = open("/sys/class/fw/fw_log/log_clear", O_RDONLY);
 		if (sizefd < 0){
 			printf("Error getting number of connections.\n");
@@ -636,7 +636,7 @@ int main(int argc, const char *argv[]) {
 				break;
 		}
 		rewind(hosts_file);
-		full_hosts = (char*)malloc(sizeof(char)*buff_size);
+		full_hosts = (char*)malloc(sizeof(char)*buff_size + 10);
 		while(fgets(line, 100, hosts_file) != NULL){
 			strcat(full_hosts, line);			
 		}

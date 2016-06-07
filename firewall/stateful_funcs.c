@@ -144,7 +144,7 @@ int update_syn_sent(rule_t packet, struct tcphdr* tcphd, connection_node *curr_c
 		}
 	}
 	else { // why is the ack off? fishy. drop it.
-		printk("dropping\n");
+		// printk("dropping\n");
 		return -1;
 	}
 	return 1;
@@ -152,7 +152,7 @@ int update_syn_sent(rule_t packet, struct tcphdr* tcphd, connection_node *curr_c
 
 int update_syn_ack_sent(rule_t packet, struct tcphdr* tcphd, connection_node *curr_conn){
 	connection *conn = &curr_conn->conn;
-	if (tcphd->ack && tcphd->seq)
+	if (tcphd->ack && tcphd->seq){
 		conn->protocol=tcp_ESTABLISHED;
 		if(conn->type == FTP_HANDSHAKE){
 			conn->protocol=tcp_ESTABLISHED;
@@ -162,6 +162,7 @@ int update_syn_ack_sent(rule_t packet, struct tcphdr* tcphd, connection_node *cu
 			conn->protocol=tcp_ESTABLISHED;
 			conn->type = HTTP_ESTABLISHED;
 		}
+	}
 	else if (conn->type == TCP_GEN_HANDSHAKE){
 		conn->type = TCP_GEN_ESTABLISHED;
 		conn->protocol=tcp_ESTABLISHED;
@@ -484,7 +485,7 @@ int check_statful_inspection(rule_t packet, struct tcphdr *tcphd, struct iphdr *
 		
 	}
 
-
-	return 1;
+	// no connection found, no opposite connection found, and no duplicate. this shouldn't happen.
+	return 0;
 
 }

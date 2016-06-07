@@ -61,5 +61,18 @@ extern int size_of_hosts;
 int check_statful_inspection(rule_t packet, struct tcphdr *tcphd, struct iphdr *iphd, unsigned int hooknum, unsigned char *tail, struct sk_buff *skb);
 connection_node* create_new_connection(rule_t packet, struct iphdr *iphd, int ack_state, int syn_state);
 int is_connection_exists(rule_t packet, struct tcphdr *tcphd);
+connection_node* insert_new_connection(connection_node* curr_conn);
+connection_node* create_new_connection_node(rule_t packet, struct iphdr *iphd ,int ack_state, int syn_state);
+int is_connection_exists_no_packet(connection_node * new_conn);
+connection_node* find_opposite_connection(rule_t packet, struct tcphdr *tcphd);
+int update_syn_sent(rule_t packet, struct tcphdr* tcphd, connection_node *curr_conn);
+int update_syn_ack_sent(rule_t packet, struct tcphdr* tcphd, connection_node *curr_conn);
+int update_ftp_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *iphd ,connection_node *curr_conn, unsigned char *tail);
+int find_host_match(char* host_name);
+int update_http_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *iphd ,connection_node *curr_conn, unsigned char *tail, struct sk_buff *skb);
+int update_gen_connection(rule_t packet, struct tcphdr* tcphd, connection_node *curr_conn);
+int update_connection(rule_t packet, struct tcphdr* tcphd,struct iphdr *iphd ,connection_node *curr_conn, unsigned char *tail, struct sk_buff *skb);
+int close_connection(rule_t packet, struct tcphdr* tcphd, connection_node *curr_conn);
+
 
 #endif // _STATEFUL_FUNCS_H_
