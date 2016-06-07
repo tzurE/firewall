@@ -219,7 +219,6 @@ int update_ftp_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *iph
 	if (conn->type == FTP_ESTABLISHED){
 	// 230 means user is connected, as stated here - https://en.wikipedia.org/wiki/List_of_FTP_server_return_codes
 		if (strnicmp(ftp_command, "230", 3) == 0){	
-			printk("FTP connected\n");
 			conn->type = FTP_CONNECTED;
 			opposite_conn = find_opposite_connection(packet, tcphd);
 			opposite_conn->conn.type = FTP_CONNECTED;
