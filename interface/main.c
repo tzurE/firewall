@@ -53,15 +53,15 @@ int parse_conn_line(char* conn_line, char* buff){
 	else if (type == 4)
 		strcat(buff, " HTTP_ESTABLISHED ");
 	else if (type == 5)
-		strcat(buff, " HTTP_END (will be cleaned up in 25 secs) ");
+		strcat(buff, " HTTP_END (End state is cleaned up after 25 secs) ");
 	else if (type == 6)
-		strcat(buff, " FTP_END (will be cleaned up in 25 secs) ");
+		strcat(buff, " FTP_END (End state is cleaned up after 25 secs) ");
 	else if (type == 7)
 		strcat(buff, " TCP_GEN_HANDSHAKE ");
 	else if (type == 8)
 		strcat(buff, " TCP_GEN_ESTABLISHED ");
 	else if (type == 9)
-		strcat(buff, " TCP_GEN_END (will be cleaned up in 25 secs) ");
+		strcat(buff, " TCP_GEN_END (End state is cleaned up after 25 secs) ");
 	else if (type == 10)
 		strcat(buff, " FTP_CONNECTED ");
 	else if (type == 11)
@@ -134,6 +134,8 @@ int decode_log_line(char* log_line, char* buff){
 		strcat(buff, "REASON_ILLEGAL_VALUE");
 	else if(reason == -8)
 		strcat(buff, "REASON_CONN_NOT_EXIST");
+	else if (reason == -12)
+		strcat(buff, "REASON_HOSTS_BLOCKED");
 	else {
 		sprintf(temp, " %d ", reason);
 		strcat(buff, temp);
@@ -593,6 +595,22 @@ int main(int argc, const char *argv[]) {
 
 	}
 	else if (strcmp(argv[1], "show_hosts") == 0){
+		char block[101] = "";
+		fd = open("/sys/class/fw/hosts/hosts", O_RDONLY);
+		if (fd < 0){
+			printf("Error opening sysfs device hosts, please make sure it exists\n");
+			return -1;
+		}
+		
+		count = read(fd, block, 100);
+		while (count != 0){
+			printf("%s", block);
+			count = read(fd, block, 100);
+
+		}
+		close(fd);
+		return 1;
+
 
 	}
 	else if (strcmp(argv[1], "load_hosts") == 0){
@@ -618,12 +636,10 @@ int main(int argc, const char *argv[]) {
 				break;
 		}
 		rewind(hosts_file);
-		printf("%d\n", buff_size);
 		full_hosts = (char*)malloc(sizeof(char)*buff_size);
 		while(fgets(line, 100, hosts_file) != NULL){
 			strcat(full_hosts, line);			
 		}
-		printf("%s\n", full_hosts);
 		strcat(full_hosts, "\n");
 		write(fd, full_hosts, strlen(full_hosts));
 		free(full_hosts);

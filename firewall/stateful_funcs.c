@@ -6,6 +6,8 @@ int num_of_conns=0;
 connection_node *conn_tab_head = NULL;
 connection_node *conn_tab_tail=NULL;
 char *hosts_list = NULL;
+int size_of_hosts;
+
 
 
 //globals
@@ -14,6 +16,7 @@ int http_command_index = 0;
 
 char ftp_command[900];
 char *http_command=NULL;
+char http_command2[500]="";
 
 
 connection_node* insert_new_connection(connection_node* curr_conn){
@@ -288,58 +291,78 @@ int update_ftp_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *iph
 
 } 
 
+int find_host_match(char* host_name){
+	char* temp_hosts_list = kmalloc(size_of_hosts*sizeof(char), GFP_ATOMIC);
+	char *host_line=NULL; 
+	char* pointer_temp;
+
+	if (hosts_list == NULL){
+		kfree(temp_hosts_list);
+		return 0;
+	}
+	strcpy(temp_hosts_list, hosts_list);
+	pointer_temp = temp_hosts_list;
+	host_line = strsep(&temp_hosts_list, "\n");
+	while (temp_hosts_list != NULL){
+		if (strcmp(host_line, host_name) == 0){
+			printk("Host name is blocked. dropping packet\n");
+			kfree(pointer_temp);
+			return 1;
+		}
+		host_line = strsep(&temp_hosts_list, "\n");
+	}
+	kfree(pointer_temp);
+	return 0;
+}
+
 int update_http_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *iphd ,connection_node *curr_conn, unsigned char *tail, struct sk_buff *skb) {
 	connection *conn = &curr_conn->conn;
 	struct timeval time_stamp;
+	char host_name[200];
 	unsigned long curr_time;
 	int found_host = 0, i = 0, result = 1;
 	int http_command_offset = iphd->ihl*4 + tcphd->doff*4; 
 	int http_command_length = skb->len - http_command_offset;
-	unsigned char *command_pointer;
-	unsigned char *line = NULL;
+	char *command_pointer;
+	char *line = NULL;
 
-	// handle fragmatation. accumulate chars to a buffer as seen here: (this is how i get the idea)
-	// http://stackoverflow.com/questions/29553990/print-tcp-packet-data
-	http_command =  kmalloc(http_command_length + 1, GFP_ATOMIC);
+
+	http_command =  kcalloc(http_command_length + 1,sizeof(char) , GFP_ATOMIC);
 	skb_copy_bits(skb, http_command_offset , (void*)http_command, http_command_length);
 	command_pointer = http_command;
-	// if(end_of_command == 0){
-	// 	// command not ended, saving for next packet
-	// 	return 1;
-	// }
-	if (conn->type == HTTP_ESTABLISHED){
-		// printk("HTTP_ESTABLISHED!!\n");
+
+	if (conn->type == HTTP_ESTABLISHED || conn->type == HTTP_CONNECTED || conn->type == HTTP_HANDSHAKE){
 		if (strnicmp(http_command, "GET", 3) == 0 ){
-			conn->type = HTTP_GET;
 			line = strsep(&http_command, "\n");
-			//search for host and compare it to the list we have
+			conn->type = HTTP_CONNECTED;
+			// search for host and compare it to the list we have
 			while (http_command != NULL && !found_host){
 				i++;
-				printk("%s\n", line);
 				if(strnicmp(line, "Host: ", 6) == 0){
 					found_host = 1;
-					printk("found host! host is:");
-					printk("%s\n", line + 6);
+					strcpy(host_name, line + 6);
+					//compare to the list
+					if (find_host_match(host_name))
+						result = -9;
+					break;
 				}
-				else if (i > 9){
+				else if (i > 80){
 					printk("Get packet is not a regular get packet. parsing stops\n");
 					break;
 
 				}
 				line = strsep(&http_command, "\n");
 			}
-
-
 		}
-
+		else{
+			conn->type=HTTP_CONNECTED;
+		}		
 	}
-	else if (conn->type == HTTP_GET){
+	kfree(command_pointer);
 
-	}
-	else if (conn->type == HTTP_CONNECTED){
-
-	}
-	kfree(http_command);	
+	do_gettimeofday(&time_stamp);
+	curr_time = time_stamp.tv_sec;
+	conn->timestamp = curr_time;
 	return result;
 
 }
@@ -365,7 +388,7 @@ int update_connection(rule_t packet, struct tcphdr* tcphd,struct iphdr *iphd ,co
 			if(curr_conn->conn.type == FTP_ESTABLISHED || curr_conn->conn.type == FTP_CONNECTED || curr_conn->conn.type == FTP_TRANSFER || curr_conn->conn.type == FTP_END){
 				return update_ftp_connection(packet, tcphd, iphd ,curr_conn, tail);
 			}
-			else if(curr_conn->conn.type == HTTP_ESTABLISHED || curr_conn->conn.type == HTTP_CONNECTED || curr_conn->conn.type == HTTP_END){
+			else if(curr_conn->conn.type == HTTP_ESTABLISHED || curr_conn->conn.type == HTTP_CONNECTED || curr_conn->conn.type == HTTP_END || curr_conn->conn.type == HTTP_HANDSHAKE){
 				return update_http_connection(packet, tcphd, iphd ,curr_conn, tail, skb);
 			}
 			else {

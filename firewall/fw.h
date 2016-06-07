@@ -32,6 +32,7 @@ typedef enum {
 	REASON_ILLEGAL_VALUE         = -6,
 	REASON_CONN_NOT_EXIST		 = -8,
 	REASON_CONN_NOT_COMPLINT	 = -10,
+	REASON_HOSTS_BLOCKED		 = -12,
 } reason_t;
 	
 

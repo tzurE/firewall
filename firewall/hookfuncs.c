@@ -74,7 +74,7 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 	else if (packet.protocol == PROT_TCP){
 		packet.src_port = tcphd->source;
 		packet.dst_port = tcphd->dest;
-		printk("prot:TCP, hooknum: %d direction: %d, src: %d, dst: %d, s_p:%u , d_p:%u \n", hooknum ,packet.direction, packet.src_ip, packet.dst_ip, ntohs(packet.src_port), ntohs(packet.dst_port));
+		// printk("prot:TCP, hooknum: %d direction: %d, src: %d, dst: %d, s_p:%u , d_p:%u \n", hooknum ,packet.direction, packet.src_ip, packet.dst_ip, ntohs(packet.src_port), ntohs(packet.dst_port));
 		if (tcphd->ack)
 			packet.ack = ACK_YES;
 		else 
@@ -87,7 +87,7 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 			return NF_DROP;
 		}
 		stateful_inspection_res = check_statful_inspection(packet, tcphd, iphd ,hooknum, tail, skb);
-		printk("res = %d\n", stateful_inspection_res);
+		// printk("res = %d\n", stateful_inspection_res);
 		// now to transfer it to a seperate check against the static table
 		// if we found a static rule match - we'll continue with the conn tab.
 		//ack is on, meaning this is a packet of existing connection. no need to go through static rules!
@@ -115,6 +115,10 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 				insert_log(&packet, REASON_CONN_NOT_COMPLINT, 0, hooknum);
 				return NF_DROP;
 			}
+			if (stateful_inspection_res == -9){
+				insert_log(&packet, REASON_HOSTS_BLOCKED, 0, hooknum);
+				return NF_DROP;
+			}
 		}
 		else {
 			// printk("ack off\n");
@@ -122,7 +126,6 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 			// Check if the connection is ok with the static rules
 			//first just check is this connection exists - before opening. if it exists - do not open!
 			if (stateful_inspection_res != 3 && (check_rule_exists(packet, hooknum) == NF_ACCEPT) && !is_connection_exists(packet, tcphd)){
-				printk("Creating new connection\n");
 				create_new_connection(packet, iphd ,0, 1);	
 				return NF_ACCEPT;
 				

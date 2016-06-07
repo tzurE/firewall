@@ -47,6 +47,7 @@ static int minor_hosts;
 static struct device* hosts_device = NULL;
 extern char *hosts_list;
 char* hosts_list_to_user;
+extern int size_of_hosts;
 /******* fw_rules functions and atts *******/
 ssize_t get_rules(struct device *dev, struct device_attribute *attr, char *buf)	{
 	return scnprintf(buf, PAGE_SIZE, rules_raw);
@@ -250,10 +251,10 @@ ssize_t get_hosts(struct device *dev, struct device_attribute *attr, char *buf)	
 
 ssize_t set_hosts(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)	{
 
+	size_of_hosts = count;
 	hosts_list = kcalloc(count + 1, sizeof(char),GFP_ATOMIC);
 	hosts_list_to_user = kcalloc(count + 1, sizeof(char),GFP_ATOMIC);
 	strcpy(hosts_list, buf);
-	strcpy(hosts_list_to_user, buf);
 	return count;	
 }
 
