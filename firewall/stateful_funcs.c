@@ -324,6 +324,8 @@ int update_http_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *ip
 	int http_command_offset = iphd->ihl*4 + tcphd->doff*4; 
 	int http_command_length = skb->len - http_command_offset;
 	char *command_pointer;
+	char *http_command3;
+	char *http_command4;
 	char *line = NULL;
 
 
@@ -331,8 +333,11 @@ int update_http_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *ip
 	skb_copy_bits(skb, http_command_offset , (void*)http_command, http_command_length);
 	command_pointer = http_command;
 
+	http_command4 = kcalloc(http_command_length + 1,sizeof(char) , GFP_ATOMIC);
+	http_command3 = kcalloc(http_command_length + 1,sizeof(char) , GFP_ATOMIC);
 	if (conn->type == HTTP_ESTABLISHED || conn->type == HTTP_CONNECTED || conn->type == HTTP_HANDSHAKE){
 		if (strnicmp(http_command, "GET", 3) == 0 ){
+			strcpy(http_command3, http_command);
 			line = strsep(&http_command, "\n");
 			conn->type = HTTP_CONNECTED;
 			// search for host and compare it to the list we have
@@ -353,6 +358,16 @@ int update_http_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *ip
 				}
 				line = strsep(&http_command, "\n");
 			}
+			result = check_for_php_attack(http_command3);
+			kfree(http_command3);
+
+		}
+		else if (strnicmp(http_command, "POST", 4) == 0){
+			conn->type = HTTP_CONNECTED;
+			strcpy(http_command4, http_command);
+			result = check_coppermine_attack(http_command4);
+			kfree(http_command4);
+
 		}
 		else{
 			conn->type=HTTP_CONNECTED;
@@ -375,7 +390,7 @@ int update_gen_connection(rule_t packet, struct tcphdr* tcphd, connection_node *
 
 int update_connection(rule_t packet, struct tcphdr* tcphd,struct iphdr *iphd ,connection_node *curr_conn, unsigned char *tail, struct sk_buff *skb){
 	switch(curr_conn->conn.protocol){
-		break;
+
 		case tcp_SYN_SENT_WAIT_SYN_ACK:
 			return update_syn_sent(packet, tcphd, curr_conn);
 

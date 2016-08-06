@@ -13,6 +13,9 @@
 #include "stateless_funcs.h"
 #include "stateful_funcs.h"
 #include "log.h"
+#include "exploits.h"
+
+
 
 /* declaring them as extern so everyone knows it's defined at hookfuncs.c */
 extern struct nf_hook_ops hooks[3];

@@ -5,6 +5,7 @@
 #include "stateless_funcs.h"
 #include "hookfuncs.h"
 
+
 typedef struct {
 	log_row_t log_entry;
 	struct log_node *next;

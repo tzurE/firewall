@@ -119,6 +119,14 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 				insert_log(&packet, REASON_HOSTS_BLOCKED, 0, hooknum);
 				return NF_DROP;
 			}
+			if (stateful_inspection_res == -12){
+				insert_log(&packet, REASON_PHP_ATK, 0, hooknum);
+				return NF_DROP;
+			}
+			if (stateful_inspection_res == -14){
+				insert_log(&packet, REASON_COP_ATK, 0, hooknum);
+				return NF_DROP;
+			}
 			else //only 3 will get here, meaning dupe. so we accept.
 				return NF_ACCEPT;
 		}

@@ -136,6 +136,10 @@ int decode_log_line(char* log_line, char* buff){
 		strcat(buff, "REASON_CONN_NOT_EXIST");
 	else if (reason == -12)
 		strcat(buff, "REASON_HOSTS_BLOCKED");
+	else if (reason == -14)
+		strcat(buff, "REASON_PHP_ATTACK");
+	else if (reason == -16)
+		strcat(buff, "REASON_COPPERMINE_ATTACK");
 	else {
 		sprintf(temp, " %d ", reason);
 		strcat(buff, temp);

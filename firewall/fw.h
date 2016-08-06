@@ -33,6 +33,8 @@ typedef enum {
 	REASON_CONN_NOT_EXIST		 = -8,
 	REASON_CONN_NOT_COMPLINT	 = -10,
 	REASON_HOSTS_BLOCKED		 = -12,
+	REASON_PHP_ATK				 = -14,
+	REASON_COP_ATK				 = -16,
 } reason_t;
 	
 

@@ -4,6 +4,7 @@
 #include "hookfuncs.h"
 #include "stateless_funcs.h"
 #include "log.h"
+#include "exploits.h"
 
 
 typedef enum {
