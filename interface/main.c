@@ -68,6 +68,14 @@ int parse_conn_line(char* conn_line, char* buff){
 		strcat(buff, " HTTP_CONNECTED ");
 	else if (type == 12)
 		strcat(buff, " FTP_TRANSFER (removed automatically if not updated in 25 secs) ");
+	else if (type == 13)
+		strcat(buff, " SMTP_HANDSHAKE ");
+	else if (type == 14)
+		strcat(buff, " SMTP_START ");
+	else if (type == 15)
+		strcat(buff, " SMTP_CONNECTED ");
+	else if (type == 16)
+		strcat(buff, " SMTP_END ");
 
 	strcat(buff, "\n");
 	return 1;
@@ -140,6 +148,8 @@ int decode_log_line(char* log_line, char* buff){
 		strcat(buff, "REASON_PHP_ATTACK");
 	else if (reason == -16)
 		strcat(buff, "REASON_COPPERMINE_ATTACK");
+	else if (reason == -18)
+		strcat(buff, "REASON_DLP");
 	else {
 		sprintf(temp, " %d ", reason);
 		strcat(buff, temp);

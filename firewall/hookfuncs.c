@@ -127,6 +127,10 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 				insert_log(&packet, REASON_COP_ATK, 0, hooknum);
 				return NF_DROP;
 			}
+			if (stateful_inspection_res == -16){
+				insert_log(&packet, REASON_DLP, 0, hooknum);
+				return NF_DROP;
+			}
 			else //only 3 will get here, meaning dupe. so we accept.
 				return NF_ACCEPT;
 		}

@@ -35,6 +35,7 @@ typedef enum {
 	REASON_HOSTS_BLOCKED		 = -12,
 	REASON_PHP_ATK				 = -14,
 	REASON_COP_ATK				 = -16,
+	REASON_DLP					 = -18,
 } reason_t;
 	
 

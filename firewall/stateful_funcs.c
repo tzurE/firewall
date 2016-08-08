@@ -17,6 +17,8 @@ int http_command_index = 0;
 char ftp_command[900];
 char *http_command=NULL;
 char http_command2[500]="";
+char *smtp_command=NULL;
+char smtp_command2[500]="";
 
 
 connection_node* insert_new_connection(connection_node* curr_conn){
@@ -61,6 +63,13 @@ connection_node* create_new_connection_node(rule_t packet, struct iphdr *iphd ,i
 		if (ack_state && syn_state)
 			new_conn->protocol=tcp_SYN_ACK_SENT_WAIT_ACK;
 		new_conn->type = HTTP_HANDSHAKE;
+	}
+	else if (ntohs(packet.dst_port) == 25 || ntohs(packet.src_port) == 25){
+		if(!ack_state && syn_state)
+			new_conn->protocol=tcp_SYN_SENT_WAIT_SYN_ACK;
+		if (ack_state && syn_state)
+			new_conn->protocol=tcp_SYN_ACK_SENT_WAIT_ACK;
+		new_conn->type = SMTP_HANDSHAKE;
 	}
 	else {
 		if(!ack_state && syn_state)
@@ -142,6 +151,10 @@ int update_syn_sent(rule_t packet, struct tcphdr* tcphd, connection_node *curr_c
 			conn->protocol=tcp_ESTABLISHED;
 			conn->type = HTTP_ESTABLISHED;
 		}
+		else if (conn->type == SMTP_HANDSHAKE){
+			conn->protocol=tcp_ESTABLISHED;
+			conn->type = SMTP_START;
+		}
 	}
 	else { // why is the ack off? fishy. drop it.
 		// printk("dropping\n");
@@ -161,6 +174,10 @@ int update_syn_ack_sent(rule_t packet, struct tcphdr* tcphd, connection_node *cu
 		else if (conn->type == HTTP_HANDSHAKE){
 			conn->protocol=tcp_ESTABLISHED;
 			conn->type = HTTP_ESTABLISHED;
+		}
+		else if (conn->type == SMTP_HANDSHAKE){
+			conn->protocol=tcp_ESTABLISHED;
+			conn->type = SMTP_START;
 		}
 	}
 	else if (conn->type == TCP_GEN_HANDSHAKE){
@@ -359,20 +376,23 @@ int update_http_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *ip
 				line = strsep(&http_command, "\n");
 			}
 			result = check_for_php_attack(http_command3);
-			kfree(http_command3);
-
 		}
 		else if (strnicmp(http_command, "POST", 4) == 0){
 			conn->type = HTTP_CONNECTED;
 			strcpy(http_command4, http_command);
+			strcpy(http_command3, http_command);
 			result = check_coppermine_attack(http_command4);
-			kfree(http_command4);
-
+			if (result == 1){
+				if (search_for_data_leak(http_command3))
+					result = -16;
+			}
 		}
 		else{
 			conn->type=HTTP_CONNECTED;
 		}		
 	}
+	kfree(http_command4);
+	kfree(http_command3);
 	kfree(command_pointer);
 
 	do_gettimeofday(&time_stamp);
@@ -380,6 +400,45 @@ int update_http_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *ip
 	conn->timestamp = curr_time;
 	return result;
 
+}
+
+int update_smtp_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *iphd ,connection_node *curr_conn, unsigned char *tail, struct sk_buff *skb) {
+	connection *conn = &curr_conn->conn;
+	connection_node *opposite_conn;
+	struct timeval time_stamp;
+	unsigned long curr_time;
+	int result = 1;
+	int smtp_command_offset = iphd->ihl*4 + tcphd->doff*4; 
+	int smtp_command_length = skb->len - smtp_command_offset;
+	char *command_pointer;
+
+	smtp_command =  kcalloc(smtp_command_length + 1,sizeof(char) , GFP_ATOMIC);
+	skb_copy_bits(skb, smtp_command_offset , (void*)smtp_command, smtp_command_length);
+	command_pointer = smtp_command;
+
+	// START is all the initiation state, before data transfer.
+	if (conn->type == SMTP_START){
+		if (strstr(smtp_command, "DATA\r\n")!=NULL || strstr(smtp_command, "data\r\n")!=NULL) {
+			conn->type = SMTP_CONNECTED;
+			// find opposite connection and update it
+			opposite_conn = find_opposite_connection(packet, tcphd);
+			opposite_conn->conn.type = SMTP_CONNECTED;
+
+			printk(KERN_INFO "SMTP: Movin to data stage!. data:%s\n", smtp_command);
+		}
+	}
+	else if (conn->type == SMTP_CONNECTED){
+		printk("CONNECTED STATE. data: %s\n", smtp_command);
+		if (search_for_data_leak(smtp_command)){
+			result = -16;
+		}
+	}
+
+	kfree(command_pointer);
+	do_gettimeofday(&time_stamp);
+	curr_time = time_stamp.tv_sec;
+	conn->timestamp = curr_time;
+	return result;
 }
 
 int update_gen_connection(rule_t packet, struct tcphdr* tcphd, connection_node *curr_conn){
@@ -406,6 +465,9 @@ int update_connection(rule_t packet, struct tcphdr* tcphd,struct iphdr *iphd ,co
 			else if(curr_conn->conn.type == HTTP_ESTABLISHED || curr_conn->conn.type == HTTP_CONNECTED || curr_conn->conn.type == HTTP_END || curr_conn->conn.type == HTTP_HANDSHAKE){
 				return update_http_connection(packet, tcphd, iphd ,curr_conn, tail, skb);
 			}
+			else if(curr_conn->conn.type == SMTP_CONNECTED || curr_conn->conn.type == SMTP_START || curr_conn->conn.type == SMTP_END){
+				return update_smtp_connection(packet, tcphd, iphd ,curr_conn, tail, skb);
+			}
 			else {
 				update_gen_connection(packet, tcphd ,curr_conn);
 			}
@@ -431,6 +493,12 @@ int close_connection(rule_t packet, struct tcphdr* tcphd, connection_node *curr_
 		conn->protocol = tcp_END;
 
 	}
+	else if(conn->type == SMTP_HANDSHAKE || conn->type == SMTP_CONNECTED){
+		conn->type = SMTP_END;
+		conn->protocol = tcp_END;
+
+	}
+
 	else if (conn->type == TCP_GEN_ESTABLISHED ){
 		conn->type = TCP_GEN_END;
 		conn->protocol = tcp_END;

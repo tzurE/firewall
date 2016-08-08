@@ -5,6 +5,8 @@
 #include "stateless_funcs.h"
 #include "log.h"
 #include "exploits.h"
+#include "data_leak.h"
+
 
 
 typedef enum {
@@ -20,6 +22,10 @@ typedef enum {
 	FTP_CONNECTED 		= 10,
 	HTTP_CONNECTED		= 11,
 	FTP_TRANSFER		= 12,
+	SMTP_HANDSHAKE		= 13,
+	SMTP_START			= 14,
+	SMTP_CONNECTED		= 15,
+	SMTP_END 			= 16,
 } tcp_type;
 
 
