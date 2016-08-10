@@ -8,6 +8,15 @@
 #include "stateful_funcs.h"
 #include "log.h"
 
+// every msg carries some round brackets, so the  overall has a bit more brackets
+#define BRACKETS_THEESHOLD (12)
+// sqaure should be a little
+#define SRACKETS_THEESHOLD (3)
+// curly should be minimal
+#define CBRACKETS_THEESHOLD (2)
+
+
+
 int search_for_data_leak(char* data);
 
 

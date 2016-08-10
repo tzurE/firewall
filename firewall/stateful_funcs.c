@@ -424,13 +424,16 @@ int update_smtp_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *ip
 			opposite_conn = find_opposite_connection(packet, tcphd);
 			opposite_conn->conn.type = SMTP_CONNECTED;
 
-			printk(KERN_INFO "SMTP: Movin to data stage!. data:%s\n", smtp_command);
+			printk(KERN_INFO "data seen.\n");
 		}
 	}
-	else if (conn->type == SMTP_CONNECTED){
+	//check only outgoing data
+	else if ((conn->type == SMTP_CONNECTED) && ntohs(conn->dst_port) == 25) {
 		printk("CONNECTED STATE. data: %s\n", smtp_command);
 		if (search_for_data_leak(smtp_command)){
 			result = -16;
+			// remove connection, this also removes other side
+			close_connection(packet, tcphd, curr_conn);
 		}
 	}
 
@@ -482,6 +485,7 @@ int update_connection(rule_t packet, struct tcphdr* tcphd,struct iphdr *iphd ,co
 }
 int close_connection(rule_t packet, struct tcphdr* tcphd, connection_node *curr_conn){
 	connection *conn = &curr_conn->conn;
+	connection_node *opposite_conn;
 
 	if(conn->type == FTP_ESTABLISHED || conn->type == FTP_CONNECTED || conn->type == FTP_TRANSFER || conn->type == FTP_HANDSHAKE ){
 		conn->type = FTP_END;
@@ -496,6 +500,9 @@ int close_connection(rule_t packet, struct tcphdr* tcphd, connection_node *curr_
 	else if(conn->type == SMTP_HANDSHAKE || conn->type == SMTP_CONNECTED){
 		conn->type = SMTP_END;
 		conn->protocol = tcp_END;
+		opposite_conn = find_opposite_connection(packet, tcphd);
+		opposite_conn->conn.type = SMTP_END;
+		opposite_conn->conn.protocol = tcp_END;
 
 	}
 
