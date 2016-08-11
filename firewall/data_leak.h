@@ -8,6 +8,9 @@
 #include "stateful_funcs.h"
 #include "log.h"
 
+// for isspace
+#include <linux/ctype.h>
+
 // every msg carries some round brackets, so the  overall has a bit more brackets
 #define BRACKETS_THEESHOLD (12)
 // sqaure should be a little

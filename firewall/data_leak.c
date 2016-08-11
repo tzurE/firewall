@@ -1,6 +1,87 @@
 #include "data_leak.h"
 
+
+int ignore_whitespace_from_location(char *data, int position){
+	char ch;
+	int length = strlen(data);
+	int counter = 0;
+
+	while(position < length){
+		ch = *(data+position);
+
+		if (ch == ' '){
+			position++;
+			counter++;
+		}
+		else{
+			break;
+		}
+	}
+	return counter;
+}
+
+int check_for_if(char* data){
+
+	return 0;
+}
+
+int check_for_while(char* data){
+
+	return 0;
+}
+
 int check_for_main(char* data){
+	char* main_position;
+	int position;
+	char *new_pos;
+	char *new_pos2;
+	char ch;
+
+	main_position = strstr(data, "main");
+
+	if (main_position == NULL)
+		return 0;
+
+	if (isspace(*(main_position - 1))){
+		position = main_position - data;
+		while (position > 0){
+			//going over position is easier than on main_position
+			ch = *(data + position - 1);
+			if(isspace(ch)){
+				position--;
+			}
+			else{
+				break;
+			}
+		}
+
+		// this is too little for "void" or "int"
+		if (position < 3) {
+			return 0;
+		}
+
+		if (strncmp((data + (position-3)),"int", 3) == 0 ){
+			//jump to end of main word
+			main_position += 4;
+			//fast forward through the whitespaces
+			main_position += ignore_whitespace_from_location(data, main_position - data);
+
+			if (*(main_position) == '('){
+				main_position += 1;
+				new_pos = strstr(main_position, ")");
+				if (new_pos == NULL)
+					return 0;
+
+				new_pos2 = strstr(new_pos, "{");
+				if (new_pos2 == NULL)
+					return 0;
+
+				if (strstr(new_pos2, "}") != NULL)
+					return 1;
+			}
+		}
+	}
+
 
 	return 0;
 }
@@ -50,16 +131,26 @@ int check_for_special_char(char* data){
 
 int check_for_pointers(char* data){
 	char* point;
+	char* point_before;
 
-	point = strstr(data, ".");
-	if (point == NULL){
+	// Clean up the "<mail.com>" line
+	point_before = strstr(data, ">");
+	if (point_before == NULL){
 		return 0;
 	}
 
-	if (((point[-1] >= 'a') && (point[-1] <= 'z')) || ((point[-1] >= 'A') && (point[-1] <= 'Z'))){
-		if (((point[1] >= 'a') && (point[1] <= 'z')) || ((point[1] >= 'A') && (point[1] <= 'Z'))){
-			return 1;
+	point = strstr(point_before, ".");
+	if (point == NULL)
+		return 0;
+
+	while(point != NULL){
+		if (((point[-1] >= 'a') && (point[-1] <= 'z')) || ((point[-1] >= 'A') && (point[-1] <= 'Z'))){
+			if (((point[1] >= 'a') && (point[1] <= 'z')) || ((point[1] >= 'A') && (point[1] <= 'Z'))){
+				if(point[1] != 'Q')
+					return 1;
+			}
 		}
+		point = strstr(point+1, ".");
 	}
 
 	point = strstr(data, "->");
@@ -90,25 +181,6 @@ int check_for_semicolon(char* data){
 	// 	return 1;
 	// }
 	return 0;
-}
-
-int ignore_whitespace(char *data, int position){
-	char ch;
-	int length = strlen(data);
-	int counter = 0;
-
-	while(position < length){
-		ch = *(data+position);
-
-		if (ch == ' '){
-			position++;
-			counter++;
-		}
-		else{
-			break;
-		}
-	}
-	return counter;
 }
 
 int check_for_brackets(char* data){
@@ -212,7 +284,17 @@ int search_for_data_leak(char* data){
 	}
 
 	if (check_for_main(data)){
-		printk("main!\n")
+		printk("found main! dropping\n");
+		return 1;
+	}
+
+	if (check_for_if(data)){
+		printk("Found if stmnt! drop\n");
+		return 1;
+	}
+
+	if (check_for_while(data)){
+		printk("found while stmnt! drop\n");
 		return 1;
 	}
 
