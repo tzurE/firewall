@@ -16,7 +16,7 @@
 // sqaure should be a little
 #define SRACKETS_THEESHOLD (3)
 // curly should be minimal
-#define CBRACKETS_THEESHOLD (2)
+#define CBRACKETS_THEESHOLD (3)
 
 
 

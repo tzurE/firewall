@@ -424,12 +424,10 @@ int update_smtp_connection(rule_t packet, struct tcphdr* tcphd, struct iphdr *ip
 			opposite_conn = find_opposite_connection(packet, tcphd);
 			opposite_conn->conn.type = SMTP_CONNECTED;
 
-			printk(KERN_INFO "data seen.\n");
 		}
 	}
 	//check only outgoing data
 	else if ((conn->type == SMTP_CONNECTED) && ntohs(conn->dst_port) == 25) {
-		printk("CONNECTED STATE. data: %s\n", smtp_command);
 		if (search_for_data_leak(smtp_command)){
 			result = -16;
 			// remove connection, this also removes other side
