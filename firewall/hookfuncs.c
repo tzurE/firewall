@@ -11,6 +11,12 @@ int parse_packet(struct sk_buff *skb, const struct net_device *net_d, unsigned i
 	struct udphdr *udphd;
 	unsigned char *tail;
 
+	if (skb->len < sizeof(struct iphdr)){
+		printk("Error: sk_buff size is too small to contain ip header\n");
+		return NF_DROP;
+	}
+
+
 	iphd = ip_hdr(skb);
 	// tcphd = (struct tcphdr *)(skb_transport_header(skb)+20);
 	// udphd = (struct udphdr *)(skb_transport_header(skb));

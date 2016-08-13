@@ -382,6 +382,18 @@ int encode_line(char * line, char* buff){
 	return 1;
 }
 
+int clear_rules_func(){
+	int fd;
+	fd = open("/sys/class/fw/fw_rules/clear_rules", O_WRONLY);
+	if (fd < 0){
+		printf("Error opening sysfs device clear_rules, please make sure it exists\n");
+		return -1;
+	}
+	write(fd, "0", 2);
+	close(fd);
+	return 1;
+}
+
 int main(int argc, const char *argv[]) {
 	int fd, fd2, count;
 	char buff[200]="";
@@ -395,6 +407,9 @@ int main(int argc, const char *argv[]) {
 
 	/* Load Rules */
 	if (strcmp (argv[1], "load_rules")==0){
+		//first clear rules
+		clear_rules_func();
+
 		fd = open("/sys/class/fw/fw_rules/rules_table", O_WRONLY);
 		if (fd < 0 ){
 			printf("error opening sysfs dev. check if it exists\n" );
@@ -461,14 +476,15 @@ int main(int argc, const char *argv[]) {
 
 
 	if (strcmp(argv[1], "clear_rules")==0){
-		fd = open("/sys/class/fw/fw_rules/clear_rules", O_WRONLY);
-		if (fd < 0){
-			printf("Error opening sysfs device clear_rules, please make sure it exists\n");
-			return -1;
-		}
-		write(fd, "0", 2);
-		close(fd);
-		return 1;
+		return clear_rules_func();
+		// fd = open("/sys/class/fw/fw_rules/clear_rules", O_WRONLY);
+		// if (fd < 0){
+		// 	printf("Error opening sysfs device clear_rules, please make sure it exists\n");
+		// 	return -1;
+		// }
+		// write(fd, "0", 2);
+		// close(fd);
+		// return 1;
 
 	}
 

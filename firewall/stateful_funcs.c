@@ -530,7 +530,7 @@ int check_statful_inspection(rule_t packet, struct tcphdr *tcphd, struct iphdr *
 		//is this connection timedout?
 		// I use this to clean up connections
 		if ((time_stamp.tv_sec - conn->timestamp) > 25 && (conn->protocol != tcp_ESTABLISHED || conn->protocol == tcp_END || conn->type == FTP_TRANSFER || (time_stamp.tv_sec - conn->timestamp) > 25*20)){
-			printk("connection timeout, removing it.\n");
+			// printk("connection timeout, removing it.\n");
 			num_of_conns--;
 			if(prev_conn != NULL){
 				prev_conn->next = curr_conn->next;

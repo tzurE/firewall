@@ -95,7 +95,8 @@ int check_for_for(char* data){
 		// got good condition, which means we found just the word "for"
 		break;
 	}
-
+	if (position == NULL)
+		return 0;
 	// advance to next "token"
 	position+=3;
 	//skip white spaces
@@ -196,14 +197,8 @@ int check_for_brackets_at_end(char *data){
 		return 0;
 	}
 
+	// search for a function name
 	if (((point[-1] >= 'a') && (point[-1] <= 'z')) || ((point[-1] >= 'A') && (point[-1] <= 'Z'))){
-		return 1;
-	}
-	return 0;
-}
-
-int check_for_comments(char* data){
-	if (strstr(data, "/*") != NULL && strstr(data, "*/") != NULL){
 		return 1;
 	}
 	return 0;
@@ -224,7 +219,12 @@ int check_for_keyword(char* data){
 }
 
 int check_for_special_char(char* data){
-	if (strstr(data, "&&") !=NULL || strstr(data, "==") !=NULL){
+	char* pos1;
+	char* pos2;
+
+	pos1 = strstr(data, "&&");
+	pos2 = strstr(data, "==");
+	if ( pos1 !=NULL ||  pos2 !=NULL){
 		return 1;
 	}
 	return 0;
@@ -232,27 +232,6 @@ int check_for_special_char(char* data){
 
 int check_for_pointers(char* data){
 	char* point;
-	char* point_before;
-
-	// Clean up the "<mail.com>" line
-	point_before = strstr(data, ">");
-	if (point_before == NULL){
-		return 0;
-	}
-
-	point = strstr(point_before, ".");
-	if (point == NULL)
-		return 0;
-
-	while(point != NULL){
-		if (((point[-1] >= 'a') && (point[-1] <= 'z')) || ((point[-1] >= 'A') && (point[-1] <= 'Z'))){
-			if (((point[1] >= 'a') && (point[1] <= 'z')) || ((point[1] >= 'A') && (point[1] <= 'Z'))){
-				if(point[1] != 'Q')
-					return 1;
-			}
-		}
-		point = strstr(point+1, ".");
-	}
 
 	point = strstr(data, "->");
 	if (point == NULL){
@@ -260,7 +239,7 @@ int check_for_pointers(char* data){
 	}
 
 	if (((point[-1] >= 'a') && (point[-1] <= 'z')) || ((point[-1] >= 'A') && (point[-1] <= 'Z'))){
-		if (((point[1] >= 'a') && (point[1] <= 'z')) || ((point[1] >= 'A') && (point[1] <= 'Z'))){
+		if (((point[2] >= 'a') && (point[2] <= 'z')) || ((point[2] >= 'A') && (point[2] <= 'Z'))){
 			return 1;
 		}
 	}
@@ -352,33 +331,28 @@ int search_for_data_leak(char* data){
 		return 1;
 	}
 
-	if (check_for_comments(data)){
-		printk("Code Detection: found comments special sign, drop\n");
-		return 1;
-	}
-
 	if (check_for_pointers(data)){
 		printk("Code Detection: found pointer refrence, drop\n");
 		return 1;
 	}
 
 	if (check_for_main(data)){
-		printk("found main function, drop\n");
+		printk("Code Detection: found main function, drop\n");
 		return 1;
 	}
 
 	if (check_for_if_or_while(data, "if", 2)){
-		printk("Found if stmnt, drop\n");
+		printk("Code Detection: Found if stmnt, drop\n");
 		return 1;
 	}
 
 	if (check_for_if_or_while(data, "while", 5)){
-		printk("found while stmnt, drop\n");
+		printk("Code Detection: found while stmnt, drop\n");
 		return 1;
 	}
 
 	if (check_for_for(data)){
-		printk("found for stmnt, drop\n");
+		printk("Code Detection: found for stmnt, drop\n");
 		return 1;
 	}
 
